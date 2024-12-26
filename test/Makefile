@@ -68,6 +68,12 @@ $(INITRAMFS)/lib/x86_64-linux-gnu: | $(VDSO_LIB)
 	@cp -L /lib/x86_64-linux-gnu/libsqlite3.so $@
 	@# required for memcached
 	@cp -L /lib/x86_64-linux-gnu/libevent-2.1.so.7 $@
+	@# required for Apache httpd benchmark
+	@cp -L /lib/x86_64-linux-gnu/libpcre2-8.so.0 $@
+	@cp -L /lib/x86_64-linux-gnu/libaprutil-1.so.0 $@
+	@cp -L /lib/x86_64-linux-gnu/libapr-1.so.0 $@
+	@cp -L /lib/x86_64-linux-gnu/libexpat.so.1 $@
+	@cp -L /lib/x86_64-linux-gnu/libuuid.so.1 $@
 	@# required for VDSO
 	@cp -L $(VDSO_LIB) $@
 
@@ -109,6 +115,7 @@ $(INITRAMFS)/usr/local:
 	@cp -r /usr/local/nginx $@
 	@cp -r /usr/local/redis $@
 	@cp -r /usr/local/memcached $@
+	@cp -r /usr/local/apache2 $@
 
 .PHONY: $(INITRAMFS)/test
 $(INITRAMFS)/test:
@@ -116,6 +123,7 @@ $(INITRAMFS)/test:
 
 $(INITRAMFS)/benchmark: | $(INITRAMFS)/benchmark/bin
 	@cp -rf $(CUR_DIR)/benchmark/* $@
+	@mkdir -p $@/apache/logs
 
 $(INITRAMFS)/benchmark/bin:
 	@mkdir -p $@
@@ -132,6 +140,7 @@ $(INITRAMFS)/benchmark/bin:
 	@cp /usr/local/leveldb/benchmark/db_bench_sqlite3 $@
 	@cp /usr/local/benchmark/hackbench $@
 	@cp /usr/local/benchmark/schbench $@
+	@cp /usr/local/wrk/wrk $@
 
 # Make necessary directories.
 $(INITRAMFS_EMPTY_DIRS):
