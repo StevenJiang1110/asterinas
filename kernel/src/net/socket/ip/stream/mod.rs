@@ -10,10 +10,12 @@ use connected::ConnectedStream;
 use connecting::{ConnResult, ConnectingStream};
 use init::InitStream;
 use listen::ListenStream;
-use options::{Congestion, KeepIdle, MaxSegment, NoDelay, WindowClamp, KEEPALIVE_INTERVAL};
+use options::{
+    Congestion, DeferAccept, KeepIdle, MaxSegment, NoDelay, WindowClamp, KEEPALIVE_INTERVAL,
+};
 use ostd::sync::{PreemptDisabled, RwLockReadGuard, RwLockWriteGuard};
 use takeable::Takeable;
-use util::TcpOptionSet;
+use util::{Retrans, TcpOptionSet};
 
 use super::UNSPECIFIED_LOCAL_ENDPOINT;
 use crate::{
@@ -678,6 +680,11 @@ impl Socket for StreamSocket {
                 let keep_idle = options.tcp.keep_idle();
                 tcp_keep_idle.set(keep_idle);
             },
+            tcp_defer_accept: DeferAccept => {
+                let defer_accept = options.tcp.defer_accept();
+                let seconds = defer_accept.to_secs();
+                tcp_defer_accept.set(seconds);
+            },
             tcp_window_clamp: WindowClamp => {
                 let window_clamp = options.tcp.window_clamp();
                 tcp_window_clamp.set(window_clamp);
@@ -748,6 +755,11 @@ fn do_tcp_setsockopt(
             options.tcp.set_keep_idle(*keepidle);
 
             // TODO: Track when the socket becomes idle to actually support keep idle.
+        },
+        tcp_defer_accept: DeferAccept => {
+            let seconds = tcp_defer_accept.get().unwrap();
+            let retrans = Retrans::from_secs(*seconds);
+            options.tcp.set_defer_accept(retrans);
         },
         tcp_window_clamp: WindowClamp => {
             let window_clamp = tcp_window_clamp.get().unwrap();

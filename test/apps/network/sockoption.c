@@ -274,3 +274,46 @@ FN_TEST(keepidle)
 		 keepidle == 200);
 }
 END_TEST()
+
+FN_TEST(defer_accept)
+{
+	int defer_accept;
+	socklen_t defer_accept_len = sizeof(defer_accept);
+
+	// 1. Check default values
+	TEST_RES(getsockopt(sk_listen, IPPROTO_TCP, TCP_DEFER_ACCEPT,
+			    &defer_accept, &defer_accept_len),
+		 defer_accept == 0);
+
+	// 2. Set and get values
+	int seconds = 100;
+	CHECK(setsockopt(sk_listen, IPPROTO_TCP, TCP_DEFER_ACCEPT, &seconds,
+			 sizeof(seconds)));
+	TEST_RES(getsockopt(sk_listen, IPPROTO_TCP, TCP_DEFER_ACCEPT,
+			    &defer_accept, &defer_accept_len),
+		 defer_accept == 127);
+
+	seconds = 511;
+	CHECK(setsockopt(sk_connected, IPPROTO_TCP, TCP_DEFER_ACCEPT, &seconds,
+			 sizeof(seconds)));
+	TEST_RES(getsockopt(sk_connected, IPPROTO_TCP, TCP_DEFER_ACCEPT,
+			    &defer_accept, &defer_accept_len),
+		 defer_accept == 607);
+
+	seconds = 16;
+	CHECK(setsockopt(sk_accepted, IPPROTO_TCP, TCP_DEFER_ACCEPT, &seconds,
+			 sizeof(seconds)));
+	TEST_RES(getsockopt(sk_accepted, IPPROTO_TCP, TCP_DEFER_ACCEPT,
+			    &defer_accept, &defer_accept_len),
+		 defer_accept == 31);
+
+	// 3. Restore sockets' state
+	seconds = 0;
+	CHECK(setsockopt(sk_listen, IPPROTO_TCP, TCP_DEFER_ACCEPT, &seconds,
+			 sizeof(seconds)));
+	CHECK(setsockopt(sk_accepted, IPPROTO_TCP, TCP_DEFER_ACCEPT, &seconds,
+			 sizeof(seconds)));
+	CHECK(setsockopt(sk_connected, IPPROTO_TCP, TCP_DEFER_ACCEPT, &seconds,
+			 sizeof(seconds)));
+}
+END_TEST()

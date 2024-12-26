@@ -9,6 +9,7 @@ pub struct TcpOptionSet {
     no_delay: bool,
     maxseg: u32,
     keep_idle: u32,
+    defer_accept: Retrans,
     window_clamp: u32,
     congestion: CongestionControl,
 }
@@ -23,6 +24,7 @@ impl TcpOptionSet {
             no_delay: false,
             maxseg: DEFAULT_MAXSEG,
             keep_idle: DEFAULT_KEEP_IDLE,
+            defer_accept: Retrans(0),
             window_clamp: DEFAULT_WINDOW_CLAMP,
             congestion: CongestionControl::Reno,
         }
@@ -32,6 +34,64 @@ impl TcpOptionSet {
 impl Default for TcpOptionSet {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+const HZ: u32 = 100;
+/// Initial RTO value
+const TCP_TIMEOUT_INIT: u32 = HZ;
+const TCP_RTO_MAX: u32 = 120 * HZ;
+
+/// The number of retransmits
+#[derive(Debug, Clone, Copy)]
+pub struct Retrans(u8);
+
+impl Retrans {
+    /// Converts seconds to retransmits
+    pub const fn from_secs(seconds: u32) -> Self {
+        if seconds == 0 {
+            return Self(0);
+        }
+
+        let mut timeout = TCP_TIMEOUT_INIT / HZ;
+        let rto_max = TCP_RTO_MAX / HZ;
+        let mut period = timeout;
+        let mut res = 1;
+
+        while seconds > period && res < 255 {
+            res += 1;
+            timeout <<= 1;
+            if timeout > rto_max {
+                timeout = rto_max;
+            }
+            period += timeout;
+        }
+
+        Self(res)
+    }
+
+    /// Converts retransmits to seconds
+    pub const fn to_secs(self) -> u32 {
+        let mut retrans = self.0;
+
+        if retrans == 0 {
+            return 0;
+        }
+
+        let mut timeout = TCP_TIMEOUT_INIT / HZ;
+        let rto_max = TCP_RTO_MAX / HZ;
+        let mut period = timeout;
+
+        while retrans > 1 {
+            retrans -= 1;
+            timeout <<= 1;
+            if timeout > rto_max {
+                timeout = rto_max;
+            }
+            period += timeout;
+        }
+
+        period
     }
 }
 

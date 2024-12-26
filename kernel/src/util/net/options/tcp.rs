@@ -3,7 +3,9 @@
 use super::RawSocketOption;
 use crate::{
     impl_raw_socket_option,
-    net::socket::ip::stream::options::{Congestion, KeepIdle, MaxSegment, NoDelay, WindowClamp},
+    net::socket::ip::stream::options::{
+        Congestion, DeferAccept, KeepIdle, MaxSegment, NoDelay, WindowClamp,
+    },
     prelude::*,
     util::net::options::SocketOption,
 };
@@ -16,13 +18,22 @@ use crate::{
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum CTcpOptionName {
-    NODELAY = 1,       /* Turn off Nagle's algorithm. */
-    MAXSEG = 2,        /* Limit MSS */
-    CORK = 3,          /* Never send partially complete segments */
-    KEEPIDLE = 4,      /* Start keeplives after this period */
-    KEEPALIVE = 5,     /* Interval between keepalives */
-    WINDOW_CLAMP = 10, /* Bound advertised window */
-    CONGESTION = 13,   /* Congestion control algorithm */
+    /// Turn off Nagle's algorithm.
+    NODELAY = 1,
+    /// Limit MSS     
+    MAXSEG = 2,
+    /// Never send partially complete segments      
+    CORK = 3,
+    /// Start keeplives after this period      
+    KEEPIDLE = 4,
+    /// Interval between keepalives  
+    KEEPINTVL = 5,
+    /// Wake up listener only when data arrive   
+    DEFER_ACCEPT = 9,
+    /// Bound advertised window
+    WINDOW_CLAMP = 10,
+    /// Congestion control algorithm
+    CONGESTION = 13,
 }
 
 pub fn new_tcp_option(name: i32) -> Result<Box<dyn RawSocketOption>> {
@@ -31,6 +42,7 @@ pub fn new_tcp_option(name: i32) -> Result<Box<dyn RawSocketOption>> {
         CTcpOptionName::NODELAY => Ok(Box::new(NoDelay::new())),
         CTcpOptionName::MAXSEG => Ok(Box::new(MaxSegment::new())),
         CTcpOptionName::KEEPIDLE => Ok(Box::new(KeepIdle::new())),
+        CTcpOptionName::DEFER_ACCEPT => Ok(Box::new(DeferAccept::new())),
         CTcpOptionName::WINDOW_CLAMP => Ok(Box::new(WindowClamp::new())),
         CTcpOptionName::CONGESTION => Ok(Box::new(Congestion::new())),
         _ => return_errno_with_message!(Errno::ENOPROTOOPT, "unsupported tcp-level option"),
@@ -40,5 +52,6 @@ pub fn new_tcp_option(name: i32) -> Result<Box<dyn RawSocketOption>> {
 impl_raw_socket_option!(NoDelay);
 impl_raw_socket_option!(MaxSegment);
 impl_raw_socket_option!(KeepIdle);
+impl_raw_socket_option!(DeferAccept);
 impl_raw_socket_option!(WindowClamp);
 impl_raw_socket_option!(Congestion);
