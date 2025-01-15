@@ -20,9 +20,12 @@ use crate::{
     trap::{IrqLine, TrapFrame},
 };
 
+static LOCK: SpinLock<()> = SpinLock::new(());
+
 /// Prints the formatted arguments to the standard output using the serial port.
 #[inline]
 pub fn print(args: fmt::Arguments) {
+    let lock = LOCK.lock();
     Stdout.write_fmt(args).unwrap();
 }
 

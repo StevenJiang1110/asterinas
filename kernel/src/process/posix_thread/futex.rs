@@ -3,9 +3,9 @@
 #![allow(dead_code)]
 
 use intrusive_collections::{intrusive_adapter, LinkedList, LinkedListAtomicLink};
+use jhash::jhash_slice;
 use ostd::{
-    cpu::num_cpus,
-    sync::{Waiter, Waker},
+    cpu::num_cpus, early_println, sync::{Waiter, Waker}
 };
 use spin::Once;
 
@@ -203,11 +203,11 @@ impl FutexBucketVec {
 
     pub fn get_bucket(&self, key: FutexKey) -> (usize, FutexBucketRef) {
         let index = (self.vec.len() - 1) & {
-            // The addr is the multiples of 4, so we ignore the last 2 bits
-            let addr = key.addr() >> 2;
-            // simple hash
-            addr / self.size()
+            let offset = key.addr() & (PAGE_SIZE - 1);
+            let addr = key.addr() - offset; 
+            jhash_slice(addr.as_bytes(), offset as u32) as usize
         };
+        early_println!("addr: {:x}, index: {}, size: {}", key.addr(), index, self.size());
         (index, self.vec[index].clone())
     }
 
