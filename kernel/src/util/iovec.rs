@@ -150,6 +150,21 @@ pub trait MultiRead {
     }
 }
 
+impl dyn MultiRead + '_ {
+    /// Reads an value of `T` from `self`.
+    ///
+    /// If the return value is `Ok(_)`,
+    /// then we must have read `size_of::<T>()` bytes from userspace.
+    pub fn read_val<T: Pod>(&mut self) -> Result<T> {
+        let mut val = T::new_zeroed();
+
+        let mut writer = VmWriter::from(val.as_bytes_mut());
+        self.read(&mut writer)?;
+
+        Ok(val)
+    }
+}
+
 /// Trait defining the write behavior for a collection of [`VmWriter`]s.
 pub trait MultiWrite {
     /// Writes the exact number of bytes required to exhaust `writer` or fill `self`,
