@@ -24,6 +24,18 @@ jobs:
         with:
           auto_test: 'general'
           runs_on: 'ubuntu-latest'
+  
+  docsrs-test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rust-lang/crates-build-env/linux:latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Successful Documentation Build on docs.rs
+        run: |
+          ./tools/github_workflows/publish_osdk_and_ostd.sh --build-doc
 
   integration-test:
     runs-on: ubuntu-latest
