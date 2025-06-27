@@ -467,9 +467,7 @@ impl<'a> VmReader<'a, Infallible> {
     ///
     /// # Safety
     ///
-    /// `ptr` must be [valid] for reads of `len` bytes during the entire lifetime `a`.
-    ///
-    /// [valid]: crate::mm::io#safety
+    /// `ptr` must be valid for reads of `len` bytes during the entire lifetime `a`.
     pub unsafe fn from_kernel_space(ptr: *const u8, len: usize) -> Self {
         // Rust is allowed to give the reference to a zero-sized object a very small address,
         // falling out of the kernel virtual address space range.
