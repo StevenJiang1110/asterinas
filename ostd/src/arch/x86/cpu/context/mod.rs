@@ -3,7 +3,6 @@
 //! CPU execution context control.
 
 use alloc::boxed::Box;
-use int_to_c_enum::TryFromInt;
 use core::{
     arch::x86_64::{_fxrstor64, _fxsave64, _xrstor64, _xsave64},
     fmt::Debug,
@@ -12,6 +11,7 @@ use core::{
 
 use bitflags::bitflags;
 use cfg_if::cfg_if;
+use int_to_c_enum::TryFromInt;
 use log::debug;
 use spin::Once;
 use x86::bits64::segmentation::wrfsbase;

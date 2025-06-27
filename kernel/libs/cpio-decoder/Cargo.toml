@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-int-to-c-enum = { path = "../../libs/int-to-c-enum" }
+int-to-c-enum = "0.1.1"
 core2 = { version = "0.4", default-features = false, features = ["alloc"] }
 lending-iterator = "0.1.7"
 

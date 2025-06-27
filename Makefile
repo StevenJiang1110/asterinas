@@ -150,15 +150,11 @@ export
 # Basically, non-OSDK crates do not depend on Aster Frame and can be checked
 # or tested without OSDK.
 NON_OSDK_CRATES := \
-	ostd/libs/align_ext \
-	ostd/libs/id-alloc \
 	ostd/libs/linux-bzimage/builder \
 	ostd/libs/linux-bzimage/boot-params \
 	ostd/libs/ostd-macros \
 	ostd/libs/ostd-test \
 	kernel/libs/cpio-decoder \
-	kernel/libs/int-to-c-enum \
-	kernel/libs/int-to-c-enum/derive \
 	kernel/libs/aster-rights \
 	kernel/libs/aster-rights-proc \
 	kernel/libs/jhash \

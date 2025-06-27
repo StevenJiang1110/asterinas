@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 spin = "0.9.4"
 ostd = { path = "../../../ostd" }
-align_ext = { path = "../../../ostd/libs/align_ext" }
-int-to-c-enum = { path = "../../libs/int-to-c-enum" }
+align_ext = "0.1.1"
+int-to-c-enum = "0.1.1"
 component = { path = "../../libs/comp-sys/component" }
 log = "0.4"
 bitvec = { version = "1.0.1", default-features = false, features = ["alloc"] }

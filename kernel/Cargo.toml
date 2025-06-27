@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-align_ext = { path = "../ostd/libs/align_ext" }
+align_ext = "0.1.1"
 aster-input = { path = "comps/input" }
 aster-block = { path = "comps/block" }
 aster-network = { path = "comps/network" }
@@ -30,8 +30,8 @@ aster-rights-proc = { path = "libs/aster-rights-proc" }
 aster-util = { path = "libs/aster-util" }
 aster-bigtcp = { path = "libs/aster-bigtcp" }
 atomic-integer-wrapper = { path = "libs/atomic-integer-wrapper" }
-id-alloc = { path = "../ostd/libs/id-alloc" }
-int-to-c-enum = { path = "libs/int-to-c-enum" }
+id-alloc = "0.1.1"
+int-to-c-enum = "0.1.1"
 cpio-decoder = { path = "libs/cpio-decoder" }
 xarray = { path = "libs/xarray" }
 intrusive-collections = "0.9.5"
@@ -56,7 +56,7 @@ rand = { version = "0.8.5", default-features = false, features = [
     "small_rng",
     "std_rng",
 ] }
-inherit-methods-macro = { git = "https://github.com/asterinas/inherit-methods-macro", rev = "98f7e3e" }
+inherit-methods-macro = "0.1.0"
 getset = "0.1.2"
 takeable = "0.2.2"
 cfg-if = "1.0"
