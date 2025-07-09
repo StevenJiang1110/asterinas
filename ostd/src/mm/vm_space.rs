@@ -162,6 +162,29 @@ impl VmSpace {
         Ok(unsafe { VmReader::<Fallible>::from_user_space(vaddr as *const u8, len) })
     }
 
+    /// Functions like [`Self::reader`].
+    ///
+    /// This method guarantees the returned reader never crosses the user-space boundary.  
+    /// Consequently, its actual length may be smaller than the requested `max_len`.
+    pub fn reader_with_max_len(
+        &self,
+        vaddr: Vaddr,
+        max_len: usize,
+    ) -> Result<VmReader<'_, Fallible>> {
+        if current_page_table_paddr() != self.pt.root_paddr() {
+            return Err(Error::AccessDenied);
+        }
+
+        if vaddr > MAX_USERSPACE_VADDR {
+            return Err(Error::AccessDenied);
+        }
+
+        let len = max_len.min(MAX_USERSPACE_VADDR - vaddr);
+
+        // SAFETY: The memory range is in user space, as checked above.
+        Ok(unsafe { VmReader::<Fallible>::from_user_space(vaddr as *const u8, len) })
+    }
+
     /// Creates a writer to write data into the user space.
     ///
     /// Returns `Err` if this `VmSpace` is not belonged to the user space of the current task

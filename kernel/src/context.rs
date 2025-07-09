@@ -84,6 +84,20 @@ impl<'a> CurrentUserSpace<'a> {
         Ok(self.root_vmar().vm_space().reader(vaddr, len)?)
     }
 
+    /// Creates a reader to read data from the user space of the current task.
+    ///
+    /// Returns `Err` If the `vaddr` is outside the user address space.
+    pub fn reader_with_max_len(
+        &self,
+        vaddr: Vaddr,
+        max_len: usize,
+    ) -> Result<VmReader<'_, Fallible>> {
+        Ok(self
+            .root_vmar()
+            .vm_space()
+            .reader_with_max_len(vaddr, max_len)?)
+    }
+
     /// Creates a writer to write data into the user space.
     ///
     /// Returns `Err` if the `vaddr` and `len` do not represent a user space memory range.
@@ -161,7 +175,7 @@ impl<'a> CurrentUserSpace<'a> {
             check_vaddr(vaddr)?;
         }
 
-        let mut user_reader = self.reader(vaddr, max_len)?;
+        let mut user_reader = self.reader_with_max_len(vaddr, max_len)?;
         user_reader.read_cstring()
     }
 }
