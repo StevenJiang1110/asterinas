@@ -28,14 +28,14 @@ pub use poll::{PollAdaptor, PollHandle, Pollable, Pollee, Poller};
 use sig_action::{SigAction, SigActionFlags, SigDefaultAction};
 use sig_mask::SigMask;
 use sig_num::SigNum;
-pub use sig_stack::{SigStack, SigStackFlags};
+pub use sig_stack::{SigStack, SigStackFlags, SIG_STACK_FLAGS_MASK};
 
 use super::posix_thread::ThreadLocal;
 use crate::{
     cpu::LinuxAbi,
     current_userspace,
     prelude::*,
-    process::{posix_thread::do_exit_group, TermStatus},
+    process::{posix_thread::do_exit_group, signal::c_types::stack_t, TermStatus},
 };
 
 pub trait SignalContext {
@@ -73,7 +73,7 @@ pub fn handle_pending_signal(
         }
     };
     let sig_num = signal.num();
-    trace!("sig_num = {:?}, sig_name = {}", sig_num, sig_num.sig_name());
+    debug!("sig_num = {:?}, sig_name = {}", sig_num, sig_num.sig_name());
 
     let mut sig_dispositions = current.sig_dispositions().lock();
 
@@ -182,11 +182,14 @@ pub fn handle_user_signal(
         .store(old_mask + mask, Ordering::Relaxed);
 
     // Set up signal stack.
-    let mut stack_pointer = if let Some(sp) = use_alternate_signal_stack(ctx.thread_local) {
-        sp as u64
-    } else {
-        // Just use user stack
-        user_ctx.stack_pointer() as u64
+    let mut stack_pointer = {
+        let sp = use_alternate_signal_stack(flags, ctx.thread_local, user_ctx.stack_pointer());
+        if let Some(sp) = sp {
+            sp as u64
+        } else {
+            // Just use user stack
+            user_ctx.stack_pointer() as u64
+        }
     };
 
     // To avoid corrupting signal stack, we minus 128 first.
@@ -201,10 +204,24 @@ pub fn handle_user_signal(
 
     // 2. Write ucontext_t.
 
+    // Store sigstack information.
+    let uc_stack = {
+        let mut sig_stack = ctx.thread_local.sig_stack().borrow_mut();
+        let stack = stack_t::from(&*sig_stack);
+
+        if sig_stack.flags().contains(SigStackFlags::SS_AUTODISARM) {
+            sig_stack.reset();
+        }
+
+        stack
+    };
+
     let mut ucontext = ucontext_t {
         uc_sigmask: mask.into(),
+        uc_stack,
         ..Default::default()
     };
+
     ucontext.uc_mcontext.copy_user_regs_from(user_ctx);
     let sig_context = ctx.thread_local.sig_context().get();
     if let Some(sig_context_addr) = sig_context {
@@ -284,6 +301,8 @@ pub fn handle_user_signal(
             // Bit 10 is the DF flag.
             const X86_RFLAGS_DF: usize = 1 << 10;
             user_ctx.general_regs_mut().rflags &= !X86_RFLAGS_DF;
+
+            user_ctx.set_rax(0);
         }
     }
 
@@ -294,21 +313,20 @@ pub fn handle_user_signal(
 /// It the stack is already active, we just increase the handler counter and return None, since
 /// the stack pointer can be read from context.
 /// It the stack is not used by any handler, we will return the new sp in alternate signal stack.
-fn use_alternate_signal_stack(thread_local: &ThreadLocal) -> Option<usize> {
-    let mut sig_stack = thread_local.sig_stack().borrow_mut();
-    let sig_stack = (*sig_stack).as_mut()?;
-
-    if sig_stack.is_disabled() {
+fn use_alternate_signal_stack(
+    flags: SigActionFlags,
+    thread_local: &ThreadLocal,
+    sp: usize,
+) -> Option<usize> {
+    if !flags.contains(SigActionFlags::SA_ONSTACK) {
         return None;
     }
 
-    if sig_stack.is_active() {
-        // The stack is already active, so we just use sp in context.
-        sig_stack.increase_handler_counter();
+    let sig_stack = thread_local.sig_stack().borrow();
+
+    if !sig_stack.active_status(sp).is_empty() {
         return None;
     }
-
-    sig_stack.increase_handler_counter();
 
     // Make sp align at 16. FIXME: is this required?
     let stack_pointer = (sig_stack.base() + sig_stack.size()).align_down(16);
