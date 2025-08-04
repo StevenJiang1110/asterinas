@@ -65,6 +65,7 @@ pub mod events;
 pub mod fs;
 pub mod ipc;
 pub mod kcmdline;
+mod namespace;
 pub mod net;
 pub mod prelude;
 mod process;
@@ -108,6 +109,7 @@ pub fn init() {
     syscall::init();
     process::init();
     fs::init();
+    namespace::init();
 }
 
 fn init_in_first_kthread(fs_resolver: &FsResolver) {
