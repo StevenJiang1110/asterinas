@@ -22,6 +22,7 @@ FEATURES ?=
 NO_DEFAULT_FEATURES ?= 0
 COVERAGE ?= 0
 ENABLE_BASIC_TEST ?= false
+INITRAMFS_SKIP_GZIP ?= 1
 # End of global build options.
 
 # GDB debugging and profiling options.
