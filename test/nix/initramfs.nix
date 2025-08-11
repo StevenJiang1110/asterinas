@@ -1,5 +1,5 @@
 { lib, stdenvNoCC, fetchFromGitHub, hostPlatform, writeClosure, busybox, apps
-, benchmark, syscall, }:
+, benchmark, syscall, callPackage, }:
 let
   etc = lib.fileset.toSource {
     root = ./../src/etc;
@@ -9,7 +9,10 @@ let
     name = "gvisor-libs";
     path = "/lib/x86_64-linux-gnu";
   };
-  all_pkgs = [ busybox etc ] ++ lib.optionals (apps != null) [ apps.package ]
+
+  podman = callPackage podman/package.nix { };
+  all_pkgs = [ busybox etc podman ]
+    ++ lib.optionals (apps != null) [ apps.package ]
     ++ lib.optionals (benchmark != null) [ benchmark.package ]
     ++ lib.optionals (syscall != null) [ syscall.package ];
 in stdenvNoCC.mkDerivation {
@@ -23,6 +26,14 @@ in stdenvNoCC.mkDerivation {
     ln -sfn usr/lib $out/lib
     ln -sfn usr/lib64 $out/lib64
     cp -r ${busybox}/bin/* $out/bin/
+
+    cp -r ${podman}/bin/* $out/bin
+    mkdir -p $out/{lib,libexec,share}
+    cp -r ${podman}/lib/* $out/lib
+    cp -r ${podman}/libexec/* $out/libexec
+    cp -r ${podman}/share/* $out/share
+
+    mkdir -p $out/usr/lib/x86_64-linux-gnu
 
     cp -r ${etc}/* $out/etc/
 
@@ -55,9 +66,9 @@ in stdenvNoCC.mkDerivation {
     mkdir -p $out/nix/store
     pkg_path=${lib.strings.concatStringsSep ":" all_pkgs}
     while IFS= read -r dep_path; do
-      if [[ "$pkg_path" == *"$dep_path"* ]]; then
-        continue
-      fi
+      # if [[ "$pkg_path" == *"$dep_path"* ]]; then
+      #  continue
+      # fi
       cp -r $dep_path $out/nix/store/
     done < ${writeClosure all_pkgs}
   '';
