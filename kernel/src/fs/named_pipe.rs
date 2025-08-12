@@ -98,9 +98,7 @@ impl NamedPipeHandle {
             HandleInner::Reader(_) => {
                 Err(Error::with_message(Errno::EBADF, "not opened for writing"))
             }
-            HandleInner::Writer(handle) => {
-                handle.inner.1.try_write(reader)
-            }
+            HandleInner::Writer(handle) => handle.inner.1.try_write(reader),
             HandleInner::ReaderWriter(_, writer) => writer.inner.1.try_write(reader),
         }
     }

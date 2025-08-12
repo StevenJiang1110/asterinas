@@ -5,6 +5,10 @@ let
     root = ./../src/etc;
     fileset = ./../src/etc;
   };
+  host_etc = builtins.path {
+    name = "host_etc";
+    path = "/etc";
+  };
   podman-hello-image = lib.fileset.toSource {
     root = ./../src/podman-hello-image;
     fileset = ./../src/podman-hello-image;
@@ -40,6 +44,10 @@ in stdenvNoCC.mkDerivation {
     cp -r ${podman}/libexec/* $out/libexec
     cp -r ${podman}/share/* $out/share
     mkdir -p $out/var/tmp
+
+    cp -r ${host_etc}/resolv.conf $out/etc
+    mkdir -p $out/etc/ssl/certs
+    cp -r ${host_etc}/ssl/certs/ca-certificates.crt $out/etc/ssl/certs
 
     mkdir -p $out/usr/lib/x86_64-linux-gnu
 
