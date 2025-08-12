@@ -33,7 +33,7 @@ pub struct PageFaultInfo {
 
 /// We can't handle most exceptions, just send self a fault signal before return to user space.
 pub fn handle_exception(ctx: &Context, context: &UserContext, exception: CpuException) {
-    debug!("[User Trap] handle exception: {:#x?}", exception);
+    trace!("[User Trap] handle exception: {:#x?}", exception);
 
     if let Ok(page_fault_info) = PageFaultInfo::try_from(&exception) {
         let user_space = ctx.user_space();
