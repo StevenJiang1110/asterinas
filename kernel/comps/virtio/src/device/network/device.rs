@@ -11,7 +11,7 @@ use aster_network::{
 };
 use aster_softirq::BottomHalfDisabled;
 use aster_util::slot_vec::SlotVec;
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use ostd::{arch::trap::TrapFrame, mm::DmaStream, sync::SpinLock};
 
 use super::{config::VirtioNetConfig, header::VirtioNetHdr};
@@ -100,7 +100,7 @@ impl NetworkDevice {
         }
 
         if recv_queue.should_notify() {
-            debug!("notify receive queue");
+            trace!("notify receive queue");
             recv_queue.notify();
         }
 
@@ -174,7 +174,7 @@ impl NetworkDevice {
     /// Receives a packet from network.
     fn receive(&mut self) -> Result<RxBuffer, VirtioNetError> {
         let (token, len) = self.recv_queue.pop_used().map_err(queue_to_network_error)?;
-        debug!("receive packet: token = {}, len = {}", token, len);
+        trace!("receive packet: token = {}, len = {}", token, len);
         let mut rx_buffer = self
             .rx_buffers
             .remove(token as usize)
@@ -209,7 +209,7 @@ impl NetworkDevice {
             self.notify_send_queue();
         }
 
-        debug!("send packet, token = {}, len = {}", token, packet.len());
+        trace!("send packet, token = {}, len = {}", token, packet.len());
 
         debug_assert!(self.tx_buffers[token as usize].is_none());
         self.tx_buffers[token as usize] = Some(tx_buffer);
@@ -235,7 +235,7 @@ impl NetworkDevice {
             return;
         }
 
-        debug!(
+        trace!(
             "notify send queue: sent {} packets",
             self.poll_stat.sent_packet
         );
@@ -251,7 +251,7 @@ impl NetworkDevice {
             return;
         }
 
-        debug!(
+        trace!(
             "notify receive queue: received {} packets",
             self.poll_stat.received_packet
         );

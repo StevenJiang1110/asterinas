@@ -18,6 +18,14 @@ let
     runc = callPackage runc/package.nix { };
     crun = callPackage crun/package.nix { };
   };
+  ssl_cert = builtins.path {
+    name = "ssl-cert";
+    path = "/etc/ssl/certs";
+  };
+  resolv_conf = builtins.path {
+    name = "resolv-conf";
+    path = "/etc";
+  };
   all_pkgs = [ busybox etc podman ]
     ++ lib.optionals (apps != null) [ apps.package ]
     ++ lib.optionals (benchmark != null) [ benchmark.package ]
@@ -40,6 +48,9 @@ in stdenvNoCC.mkDerivation {
     cp -r ${podman}/libexec/* $out/libexec
     cp -r ${podman}/share/* $out/share
     mkdir -p $out/var/tmp
+    mkdir -p $out/etc/ssl/certs
+    cp -r ${ssl_cert}/ca-certificates.crt $out/etc/ssl/certs/
+    cp -r ${resolv_conf}/resolv.conf $out/etc/
 
     mkdir -p $out/usr/lib/x86_64-linux-gnu
 
