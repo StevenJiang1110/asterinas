@@ -32,6 +32,7 @@ in stdenvNoCC.mkDerivation {
     cp -r ${podman}/lib/* $out/lib
     cp -r ${podman}/libexec/* $out/libexec
     cp -r ${podman}/share/* $out/share
+    mkdir -p $out/var/tmp
 
     mkdir -p $out/usr/lib/x86_64-linux-gnu
 
