@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use core::time::Duration;
+
 use int_to_c_enum::TryFromInt;
 
 use super::SyscallReturn;
@@ -37,6 +39,27 @@ pub fn sys_getrusage(target: i32, rusage_addr: Vaddr, ctx: &Context) -> Result<S
                 rusage_t {
                     ru_utime: posix_thread.prof_clock().user_clock().read_time().into(),
                     ru_stime: posix_thread.prof_clock().kernel_clock().read_time().into(),
+                    ..Default::default()
+                }
+            }
+            RusageTarget::Children => {
+                let process = ctx.process;
+                let children = process.children().lock();
+                let ru_utime: Duration = {
+                    children
+                        .values()
+                        .map(|child| child.prof_clock().user_clock().read_time())
+                        .sum()
+                };
+                let ru_stime: Duration = {
+                    children
+                        .values()
+                        .map(|child| child.prof_clock().kernel_clock().read_time())
+                        .sum()
+                };
+                rusage_t {
+                    ru_utime: ru_utime.into(),
+                    ru_stime: ru_stime.into(),
                     ..Default::default()
                 }
             }
