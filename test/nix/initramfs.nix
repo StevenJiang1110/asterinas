@@ -5,6 +5,10 @@ let
     root = ./../src/etc;
     fileset = ./../src/etc;
   };
+  podman-hello-image = lib.fileset.toSource {
+    root = ./../src/podman-hello-image;
+    fileset = ./../src/podman-hello-image;
+  };
   gvisor_libs = builtins.path {
     name = "gvisor-libs";
     path = "/lib/x86_64-linux-gnu";
@@ -37,6 +41,9 @@ in stdenvNoCC.mkDerivation {
     mkdir -p $out/usr/lib/x86_64-linux-gnu
 
     cp -r ${etc}/* $out/etc/
+
+    mkdir -p $out/podman-hello-image
+    cp -r ${podman-hello-image}/* $out/podman-hello-image/
 
     ${lib.optionalString (apps != null) ''
       cp -r ${apps.package}/* $out/test/
