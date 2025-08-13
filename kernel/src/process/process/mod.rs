@@ -293,7 +293,7 @@ impl Process {
         self.parent.lock().process().upgrade().is_none()
     }
 
-    pub(super) fn children(&self) -> &Mutex<BTreeMap<Pid, Arc<Process>>> {
+    pub fn children(&self) -> &Mutex<BTreeMap<Pid, Arc<Process>>> {
         &self.children
     }
 
