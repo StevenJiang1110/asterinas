@@ -149,13 +149,15 @@ impl PosixThreadBuilder {
 
         let file_table = file_table.unwrap_or_else(|| RwArc::new(FileTable::new()));
 
-        let fs = fs.unwrap_or_else(|| Arc::new(ThreadFsInfo::default()));
-
         let user_ns = user_ns.unwrap_or_else(|| INIT_USER_NS.get().unwrap().clone());
 
         let ns_context = ns_context.unwrap_or_else(|| {
             assert!(Arc::ptr_eq(&user_ns, INIT_USER_NS.get().unwrap()));
-            Arc::new(NsContext::new_init())
+            NsContext::new_init()
+        });
+
+        let fs = fs.unwrap_or_else(|| {
+            Arc::new(ThreadFsInfo::new(ns_context.mnt_ns().create_fs_resolver()))
         });
 
         let root_vmar = process

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::{
+    fs::path::MountNamespace,
     prelude::*,
     process::{posix_thread::PosixThread, CloneFlags},
 };
@@ -20,16 +21,17 @@ pub use uts::UtsNamespace;
 /// Note that the user and PID namespace are not managed by this struct.
 /// They are managed in separate places.
 pub struct NsContext {
-    uts: Arc<UtsNamespace>,
+    uts_ns: Arc<UtsNamespace>,
+    mnt_ns: Arc<MountNamespace>,
 }
 
 impl NsContext {
     /// Creates a new `NsContext` in the initial state.
-    pub fn new_init() -> Self {
+    pub fn new_init() -> Arc<Self> {
         let owner = INIT_USER_NS.get().unwrap();
-        Self {
-            uts: UtsNamespace::new_init(owner.clone()),
-        }
+        let uts_ns = UtsNamespace::new_init(owner.clone());
+        let mnt_ns = MountNamespace::new_init(owner.clone());
+        Arc::new(Self { uts_ns, mnt_ns })
     }
 
     /// Creates a new `NsContext` by cloning from an existing `context`.
@@ -63,8 +65,13 @@ impl NsContext {
         let mut clone_builder = NsContextCloneBuilder::new(self);
 
         if clone_ns_flags.contains(CloneFlags::CLONE_NEWUTS) {
-            let new_uts = self.uts.clone_new(user_ns.clone(), posix_thread)?;
-            clone_builder.new_uts(new_uts);
+            let new_uts_ns = self.uts_ns.clone_new(user_ns.clone(), posix_thread)?;
+            clone_builder.new_uts_ns(new_uts_ns);
+        }
+
+        if clone_ns_flags.contains(CloneFlags::CLONE_NEWNS) {
+            let new_mnt_ns = self.mnt_ns().clone_new(user_ns.clone(), posix_thread)?;
+            clone_builder.new_mnt_ns(new_mnt_ns);
         }
 
         // TODO: Support other namespaces.
@@ -73,8 +80,13 @@ impl NsContext {
     }
 
     /// Returns the associated UTS namespace.
-    pub fn uts(&self) -> &Arc<UtsNamespace> {
-        &self.uts
+    pub fn uts_ns(&self) -> &Arc<UtsNamespace> {
+        &self.uts_ns
+    }
+
+    /// Returns the associated mount namespace.
+    pub fn mnt_ns(&self) -> &Arc<MountNamespace> {
+        &self.mnt_ns
     }
 
     /// Installs the namespace context to the thread specified by `ctx`.
@@ -87,6 +99,13 @@ impl NsContext {
 
         *pthread_ns_context = Some(self.clone());
         thread_local_ns_context.replace(Some(self));
+
+        ctx.thread_local
+            .borrow_fs()
+            .resolver()
+            .write()
+            .switch_to_mnt_ns(thread_local_ns_context.unwrap().mnt_ns())
+            .unwrap();
     }
 }
 
@@ -96,7 +115,8 @@ pub struct NsContextCloneBuilder<'a> {
     old_context: &'a NsContext,
 
     // Fields for new namespaces.
-    new_uts: Option<Arc<UtsNamespace>>,
+    new_uts_ns: Option<Arc<UtsNamespace>>,
+    new_mnt_ns: Option<Arc<MountNamespace>>,
 }
 
 impl<'a> NsContextCloneBuilder<'a> {
@@ -104,13 +124,20 @@ impl<'a> NsContextCloneBuilder<'a> {
     pub fn new(old_context: &'a NsContext) -> Self {
         Self {
             old_context,
-            new_uts: None,
+            new_uts_ns: None,
+            new_mnt_ns: None,
         }
     }
 
     /// Sets the new UTS namespace.
-    pub fn new_uts(&mut self, new_uts: Arc<UtsNamespace>) -> &mut Self {
-        self.new_uts = Some(new_uts);
+    pub fn new_uts_ns(&mut self, new_uts_ns: Arc<UtsNamespace>) -> &mut Self {
+        self.new_uts_ns = Some(new_uts_ns);
+        self
+    }
+
+    /// Sets the new mount namespace for the context being built.
+    pub fn new_mnt_ns(&mut self, mnt_ns: Arc<MountNamespace>) -> &mut Self {
+        self.new_mnt_ns = Some(mnt_ns);
         self
     }
 
@@ -118,12 +145,17 @@ impl<'a> NsContextCloneBuilder<'a> {
     pub fn build(self) -> NsContext {
         let Self {
             old_context,
-            new_uts,
+            new_uts_ns,
+            new_mnt_ns,
         } = self;
 
-        let new_uts = new_uts.unwrap_or_else(|| old_context.uts.clone());
+        let new_uts_ns = new_uts_ns.unwrap_or_else(|| old_context.uts_ns.clone());
+        let new_mnt_ns = new_mnt_ns.unwrap_or_else(|| old_context.mnt_ns.clone());
 
-        NsContext { uts: new_uts }
+        NsContext {
+            uts_ns: new_uts_ns,
+            mnt_ns: new_mnt_ns,
+        }
     }
 }
 
@@ -131,7 +163,7 @@ impl<'a> NsContextCloneBuilder<'a> {
 ///
 /// This method does not check CLONE_NEWUSER since it's handled separately.
 pub fn check_unsupported_ns_flags(flags: CloneFlags) -> Result<()> {
-    const SUPPORTED_FLAGS: CloneFlags = CloneFlags::CLONE_NEWUTS;
+    const SUPPORTED_FLAGS: CloneFlags = CloneFlags::CLONE_NEWUTS.union(CloneFlags::CLONE_NEWNS);
 
     let unsupported_flags = (flags & CLONE_NS_FLAGS) - SUPPORTED_FLAGS - CloneFlags::CLONE_NEWUSER;
     if unsupported_flags.is_empty() {
