@@ -46,6 +46,8 @@ pub fn sys_mount(
             .lookup(&fs_path)?
     };
 
+    println!("mount flags = {:?}", mount_flags);
+
     if mount_flags.contains(MountFlags::MS_REMOUNT) && mount_flags.contains(MountFlags::MS_BIND) {
         do_reconfigure_mnt()?;
     } else if mount_flags.contains(MountFlags::MS_REMOUNT) {
@@ -62,7 +64,7 @@ pub fn sys_mount(
         | mount_flags.contains(MountFlags::MS_SLAVE)
         | mount_flags.contains(MountFlags::MS_UNBINDABLE)
     {
-        do_change_type()?;
+        // do_change_type()?;
     } else if mount_flags.contains(MountFlags::MS_MOVE) {
         do_move_mount_old(devname, dst_path, ctx)?;
     } else {
