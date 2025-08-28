@@ -10,7 +10,8 @@ use crate::{
     fs::{
         file_table::FdEvents,
         procfs::pid::{
-            cgroup::CgroupOps, mountinfo::MountInfoFileOps, oom_score_adj::OomScoreAdjFileOps,
+            cgroup::CgroupOps, gid_map::GidMapFileOps, mountinfo::MountInfoFileOps,
+            oom_score_adj::OomScoreAdjFileOps, uid_map::UidMapFileOps,
         },
         utils::{DirEntryVecExt, Inode},
     },
@@ -23,11 +24,13 @@ mod cmdline;
 mod comm;
 mod exe;
 mod fd;
+mod gid_map;
 mod mountinfo;
 mod oom_score_adj;
 mod stat;
 mod status;
 mod task;
+mod uid_map;
 
 /// Represents the inode at `/proc/[pid]`.
 pub struct PidDirOps(Arc<Process>);
@@ -72,6 +75,7 @@ impl DirOps for PidDirOps {
             "comm" => CommFileOps::new_inode(self.0.clone(), this_ptr.clone()),
             "fd" => FdDirOps::new_inode(self.0.clone(), this_ptr.clone()),
             "cmdline" => CmdlineFileOps::new_inode(self.0.clone(), this_ptr.clone()),
+            "gid_map" => GidMapFileOps::new_inode(this_ptr.clone()),
             "mountinfo" => MountInfoFileOps::new_inode(self.0.main_thread(), this_ptr.clone()),
             "status" => {
                 StatusFileOps::new_inode(self.0.clone(), self.0.main_thread(), this_ptr.clone())
@@ -81,6 +85,7 @@ impl DirOps for PidDirOps {
             }
             "task" => TaskDirOps::new_inode(self.0.clone(), this_ptr.clone()),
             "oom_score_adj" => OomScoreAdjFileOps::new_inode(this_ptr.clone()),
+            "uid_map" => UidMapFileOps::new_inode(this_ptr.clone()),
             _ => return_errno!(Errno::ENOENT),
         };
         Ok(inode)
@@ -107,6 +112,8 @@ impl DirOps for PidDirOps {
         cached_children.put_entry_if_not_found("cmdline", || {
             CmdlineFileOps::new_inode(self.0.clone(), this_ptr.clone())
         });
+        cached_children
+            .put_entry_if_not_found("gid_map", || GidMapFileOps::new_inode(this_ptr.clone()));
         cached_children.put_entry_if_not_found("mountinfo", || {
             MountInfoFileOps::new_inode(self.0.main_thread(), this_ptr.clone())
         });
@@ -122,5 +129,7 @@ impl DirOps for PidDirOps {
         cached_children.put_entry_if_not_found("oom_score_adj", || {
             OomScoreAdjFileOps::new_inode(this_ptr.clone())
         });
+        cached_children
+            .put_entry_if_not_found("uid_map", || UidMapFileOps::new_inode(this_ptr.clone()));
     }
 }
