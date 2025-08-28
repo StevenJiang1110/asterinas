@@ -13,7 +13,7 @@ ostd = { path = "../../../ostd" }
 owo-colors = { version = "3", optional = true }
 
 [features]
-default = ["log_color"]
+default = []
 log_color = ["dep:owo-colors"]
 
 [lints]
