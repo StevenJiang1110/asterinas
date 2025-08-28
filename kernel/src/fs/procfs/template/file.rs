@@ -76,11 +76,11 @@ impl<F: FileOps + 'static> Inode for ProcFile<F> {
     }
 
     fn write_at(&self, _offset: usize, _reader: &mut VmReader) -> Result<usize> {
-        Err(Error::new(Errno::EPERM))
+        Ok(_reader.remain())
     }
 
     fn write_direct_at(&self, _offset: usize, _reader: &mut VmReader) -> Result<usize> {
-        Err(Error::new(Errno::EPERM))
+        Ok(_reader.remain())
     }
 
     fn read_link(&self) -> Result<String> {
