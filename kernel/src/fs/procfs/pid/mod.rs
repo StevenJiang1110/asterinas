@@ -10,7 +10,7 @@ use crate::{
     fs::{
         file_table::FdEvents,
         procfs::pid::{
-            cgroup::CgroupOps, mountinfo::MountInfoFileOps, oom_score_adj::OomScoreAdjFileOps,
+            cgroup::CgroupOps, mountinfo::MountInfoFileOps, oom_score_adj::OomScoreAdjFileOps, uid_map::UidMapFileOps,
         },
         utils::{DirEntryVecExt, Inode},
     },
@@ -28,6 +28,7 @@ mod oom_score_adj;
 mod stat;
 mod status;
 mod task;
+mod uid_map;
 
 /// Represents the inode at `/proc/[pid]`.
 pub struct PidDirOps(Arc<Process>);
@@ -81,6 +82,7 @@ impl DirOps for PidDirOps {
             }
             "task" => TaskDirOps::new_inode(self.0.clone(), this_ptr.clone()),
             "oom_score_adj" => OomScoreAdjFileOps::new_inode(this_ptr.clone()),
+            "uid_map" => UidMapFileOps::new_inode(this_ptr.clone()),
             _ => return_errno!(Errno::ENOENT),
         };
         Ok(inode)
