@@ -1,14 +1,13 @@
-{ lib, stdenv, fetchFromGitHub, pkg-config, installShellFiles, buildGoModule
-, gpgme, lvm2, btrfs-progs, libapparmor, libseccomp, libselinux, systemd
-, go-md2man, nixosTests, python3, makeWrapper, runtimeShell, symlinkJoin
-, replaceVars, extraPackages ? [ ], crun, runc, conmon
+{ lib, stdenv, fetchFromGitHub, fetchpatch2, pkg-config, installShellFiles
+, buildGoModule, gpgme, lvm2, btrfs-progs, libapparmor, libseccomp, libselinux
+, systemd, go-md2man, nixosTests, python3, makeWrapper, runtimeShell
+, symlinkJoin, replaceVars, extraPackages ? [ ], crun, runc, conmon
 , extraRuntimes ? lib.optionals stdenv.hostPlatform.isLinux [ runc ]
 , # e.g.: runc, gvisor, youki
 fuse-overlayfs, util-linux, iptables, iproute2, catatonit, gvproxy, aardvark-dns
 , netavark, passt, vfkit, testers, podman, }:
 let
   # do not add qemu to this wrapper, store paths get written to the podman vm config and break when GCed
-
   binPath = lib.makeBinPath (lib.optionals stdenv.hostPlatform.isLinux [
     fuse-overlayfs
     util-linux
@@ -26,18 +25,15 @@ let
       netavark
       passt
       conmon
-      crun
     ] ++ extraRuntimes;
   };
 in buildGoModule rec {
   pname = "podman";
   version = "5.5.2";
 
-  src = fetchFromGitHub {
-    owner = "containers";
-    repo = "podman";
-    rev = "v${version}";
-    hash = "sha256-iLpJQC1v+jPeQNCjgtx3pPKsa6wLcrqtQkeG7qF3rWo=";
+  src = lib.fileset.toSource {
+    root = /root/podman;
+    fileset = /root/podman;
   };
 
   patches = [

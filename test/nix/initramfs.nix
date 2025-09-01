@@ -13,8 +13,10 @@ let
     name = "gvisor-libs";
     path = "/lib/x86_64-linux-gnu";
   };
-
-  podman = callPackage podman/package.nix { };
+  podman = callPackage podman/package.nix {
+    conmon = callPackage conmon/package.nix { };
+    runc = callPackage runc/package.nix { };
+  };
   all_pkgs = [ busybox etc podman ]
     ++ lib.optionals (apps != null) [ apps.package ]
     ++ lib.optionals (benchmark != null) [ benchmark.package ]
