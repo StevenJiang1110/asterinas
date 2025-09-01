@@ -46,14 +46,18 @@ impl super::SubControl for CpuSetController {
     ) -> Result<usize> {
         match name {
             "cpuset.cpus.effective" => {
-                let bytes = "0-1".as_bytes();
-                let size = writer.write(&mut VmReader::from(bytes)).unwrap();
-                return Ok(size);
+                let context = "0-3";
+                let len = writer
+                    .write(&mut VmReader::from(context.as_bytes()))
+                    .map_err(|_| Error::AttributeError)?;
+                Ok(len)
             }
             "cpuset.mems.effective" => {
-                let bytes = "0".as_bytes();
-                let size = writer.write(&mut VmReader::from(bytes)).unwrap();
-                return Ok(size);
+                let context = "0";
+                let len = writer
+                    .write(&mut VmReader::from(context.as_bytes()))
+                    .map_err(|_| Error::AttributeError)?;
+                Ok(len)
             }
             _ => Err(Error::AttributeError),
         }
