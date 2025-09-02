@@ -61,7 +61,8 @@ pub trait FileLike: Pollable + Send + Sync + Any {
     }
 
     fn set_mode(&self, mode: InodeMode) -> Result<()> {
-        return_errno_with_message!(Errno::EINVAL, "set_mode is not supported");
+        Ok(())
+        // return_errno_with_message!(Errno::EINVAL, "set_mode is not supported");
     }
 
     fn owner(&self) -> Result<Uid> {

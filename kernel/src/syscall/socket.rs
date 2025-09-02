@@ -32,6 +32,9 @@ pub fn sys_socket(domain: i32, type_: i32, protocol: i32, ctx: &Context) -> Resu
         (CSocketAddrFamily::AF_UNIX, SockType::SOCK_SEQPACKET) => {
             UnixStreamSocket::new(is_nonblocking, true) as Arc<dyn FileLike>
         }
+        (CSocketAddrFamily::AF_UNIX, SockType::SOCK_DGRAM) => {
+            UnixStreamSocket::new(is_nonblocking, true) as Arc<dyn FileLike>
+        }
         (CSocketAddrFamily::AF_INET, SockType::SOCK_STREAM) => {
             let protocol = Protocol::try_from(protocol)?;
             debug!("protocol = {:?}", protocol);
