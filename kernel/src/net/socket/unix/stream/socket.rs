@@ -429,8 +429,12 @@ impl Socket for UnixStreamSocket {
             warn!("unsupported flags: {:?}", flags);
         }
 
+        println!("recvmsg, non blocking = {}", self.is_nonblocking());
+
         let (received_bytes, control_messages) =
             self.block_on(IoEvents::IN, || self.try_recv(writer, flags))?;
+
+        println!("received_bytes = {}", received_bytes);
 
         let message_header = MessageHeader::new(None, control_messages);
 

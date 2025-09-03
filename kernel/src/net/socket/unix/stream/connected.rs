@@ -42,6 +42,12 @@ impl Connected {
         let (this_writer, peer_reader) = RingBuffer::new(UNIX_STREAM_DEFAULT_BUF_SIZE).split();
         let (peer_writer, this_reader) = RingBuffer::new(UNIX_STREAM_DEFAULT_BUF_SIZE).split();
 
+        println!(
+            "socket pair, buffer1 addr = 0x{:x}, buffer2 addr = 0x{:x}",
+            this_writer.addr(),
+            peer_writer.addr()
+        );
+
         let this_inner = Inner {
             addr: SpinLock::new(addr),
             state,
@@ -113,6 +119,11 @@ impl Connected {
         // `reader.len()` is an `Acquire` operation. So it can guarantee that the `has_aux`
         // check below sees the up-to-date value.
         let no_aux_len = reader.len();
+        println!(
+            "reader addr = 0x{:x}, no aux len = {}",
+            reader.addr(),
+            no_aux_len
+        );
 
         let peer_end = self.inner.peer_end();
         let is_pass_cred = self.inner.this_end().is_pass_cred.load(Ordering::Relaxed);
@@ -122,6 +133,10 @@ impl Connected {
             let read_len = self
                 .inner
                 .read_with(move || reader.read_fallible_with_max_len(writer, no_aux_len))?;
+
+            if read_len == 0 {
+                return_errno_with_message!(Errno::EAGAIN, "there's nothing to receive");
+            }
             let ctrl_msgs = if is_pass_cred {
                 AuxiliaryData::default().generate_control(is_pass_cred)
             } else {
@@ -238,7 +253,9 @@ impl Connected {
                 if is_seqpacket && writer.free_len() < reader.sum_lens() {
                     return Ok(0);
                 }
-                writer.write_fallible(reader)
+                let res = writer.write_fallible(reader)?;
+                println!("write to: addr = 0x{:x}, len = {}", writer.addr(), res);
+                Ok(res)
             });
         }
 

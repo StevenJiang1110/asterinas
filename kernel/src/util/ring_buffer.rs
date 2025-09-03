@@ -67,6 +67,18 @@ pub struct Consumer<T, R: Deref<Target = RingBuffer<T>>> {
 pub type RbProducer<T> = Producer<T, Arc<RingBuffer<T>>>;
 pub type RbConsumer<T> = Consumer<T, Arc<RingBuffer<T>>>;
 
+impl<T> RbProducer<T> {
+    pub fn addr(&self) -> usize {
+        Arc::as_ptr(&self.rb) as usize
+    }
+}
+
+impl<T> RbConsumer<T> {
+    pub fn addr(&self) -> usize {
+        Arc::as_ptr(&self.rb) as usize
+    }
+}
+
 impl<T> RingBuffer<T> {
     const T_SIZE: usize = core::mem::size_of::<T>();
 
