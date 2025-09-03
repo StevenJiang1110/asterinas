@@ -145,6 +145,7 @@ impl FileLike for MemfdFile {
     }
 
     fn inode(&self) -> Option<&Arc<dyn Inode>> {
+        println!("inode of memfd file");
         Some(&self.inode)
     }
 }

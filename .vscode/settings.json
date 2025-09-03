@@ -29,5 +29,9 @@
         "**/.svn": false,
         "**/CVS": false,
         "**/Thumbs.db": false
+    },
+    "files.associations": {
+        "unistd.h": "c",
+        "mman.h": "c"
     }
 }

@@ -35,7 +35,7 @@ pub fn sys_fcntl(fd: FileDesc, cmd: i32, arg: u64, ctx: &Context) -> Result<Sysc
         FcntlCmd::F_ADD_SEALS => {
             warn!("F_ADD_SEALS is not supported");
             return Ok(SyscallReturn::Return(0));
-        },
+        }
         FcntlCmd::F_GET_SEALS => handle_get_seals(fd, ctx),
     }
 }

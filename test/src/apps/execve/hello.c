@@ -1,19 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
+// hello.c
 #include <stdio.h>
+#include <unistd.h> // For getpid()
 
-int main(int argc, char *argv[], char *envp[])
-{
-	printf("Hello world from hello.c(execved in execve.c)!\n");
-	printf("argc = %d\n", argc);
-	for (int i = 0; i < argc; i++) {
-		printf("%s\n", argv[i]);
-	}
-	for (int i = 0;; i++) {
-		if (envp[i] == NULL) {
-			break;
-		}
-		printf("%s\n", envp[i]);
-	}
-	return 0;
+int main() {
+    printf("Hello from memfd! My PID is %d\n", getpid());
+    return 0;
 }

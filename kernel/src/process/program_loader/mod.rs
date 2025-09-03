@@ -12,7 +12,7 @@ use crate::{
     fs::{
         fs_resolver::{FsPath, FsResolver, AT_FDCWD},
         path::Path,
-        utils::{InodeType, Permission},
+        utils::{Inode, InodeType, Permission},
     },
     prelude::*,
 };
@@ -22,7 +22,7 @@ use crate::{
 /// This struct encapsulates the ELF file to be executed along with its header data,
 /// the `argv` and the `envp` which is required for the program execution.
 pub struct ProgramToLoad {
-    elf_file: Path,
+    elf_file: Arc<dyn Inode>,
     file_first_page: Box<[u8; PAGE_SIZE]>,
     argv: Vec<CString>,
     envp: Vec<CString>,
@@ -37,13 +37,12 @@ impl ProgramToLoad {
     /// I guess for most cases, setting the `recursion_limit` as 1 should be enough.
     /// because the interpreter is usually an elf binary(e.g., /bin/bash)
     pub fn build_from_file(
-        elf_file: Path,
+        inode: Arc<dyn Inode>,
         fs_resolver: &FsResolver,
         argv: Vec<CString>,
         envp: Vec<CString>,
         recursion_limit: usize,
     ) -> Result<Self> {
-        let inode = elf_file.inode();
         let file_first_page = {
             // Read the first page of file header, which must contain the ELF header.
             let mut buffer = Box::new([0u8; PAGE_SIZE]);
@@ -62,7 +61,7 @@ impl ProgramToLoad {
             };
             check_executable_file(&interpreter)?;
             return Self::build_from_file(
-                interpreter,
+                interpreter.inode().clone(),
                 fs_resolver,
                 new_argv,
                 envp,
@@ -71,7 +70,7 @@ impl ProgramToLoad {
         }
 
         Ok(Self {
-            elf_file,
+            elf_file: inode,
             file_first_page,
             argv,
             envp,
@@ -87,8 +86,7 @@ impl ProgramToLoad {
         self,
         process_vm: &ProcessVm,
         fs_resolver: &FsResolver,
-    ) -> Result<(String, ElfLoadInfo)> {
-        let abs_path = self.elf_file.abs_path();
+    ) -> Result<ElfLoadInfo> {
         let elf_headers = ElfHeaders::parse_elf(&*self.file_first_page)?;
         let elf_load_info = load_elf_to_vm(
             process_vm,
@@ -99,7 +97,7 @@ impl ProgramToLoad {
             self.envp,
         )?;
 
-        Ok((abs_path, elf_load_info))
+        Ok(elf_load_info)
     }
 }
 

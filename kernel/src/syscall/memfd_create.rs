@@ -27,7 +27,7 @@ pub fn sys_memfd_create(name_addr: Vaddr, flags: u32, ctx: &Context) -> Result<S
     let name = ctx
         .user_space()
         .read_cstring(name_addr, MAX_MEMFD_NAME_LEN + 1)?;
-    debug!("sys_memfd_create: name = {:?}, flags = {}", name, flags);
+    println!("sys_memfd_create: name = {:?}, flags = {}", name, flags);
 
     let memfd_file = MemfdFile::new(name.to_string_lossy().as_ref())?;
 

@@ -9,15 +9,18 @@ use ostd::{
 use super::{constants::*, SyscallReturn};
 use crate::{
     fs::{
+        file_handle::FileLike,
         file_table::{get_file_fast, FileDesc},
         fs_resolver::{FsPath, AT_FDCWD},
         path::Path,
+        utils::Inode,
     },
     prelude::*,
     process::{
         check_executable_file, posix_thread::ThreadName, renew_vm_and_map, Credentials, Process,
         ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS,
     },
+    vm::memfd::MemfdFile,
 };
 
 pub fn sys_execve(
@@ -48,6 +51,7 @@ pub fn sys_execveat(
     let elf_file = {
         let flags = OpenFlags::from_bits_truncate(flags);
         let filename = read_filename(filename_ptr, ctx)?;
+        println!("execveat, filename = {}", filename);
         lookup_executable_file(dfd, filename, flags, ctx)?
     };
 
@@ -60,29 +64,37 @@ fn lookup_executable_file(
     filename: String,
     flags: OpenFlags,
     ctx: &Context,
-) -> Result<Path> {
+) -> Result<(String, Arc<dyn Inode>)> {
     let path = if flags.contains(OpenFlags::AT_EMPTY_PATH) && filename.is_empty() {
         let mut file_table = ctx.thread_local.borrow_file_table_mut();
         let file = get_file_fast!(&mut file_table, dfd);
-        file.as_inode_or_err()?.path().clone()
+        if let Some(inode) = file.inode() {
+            (dfd.to_string(), inode.clone())
+        } else {
+            (
+                dfd.to_string(),
+                file.as_inode_or_err()?.inode().unwrap().clone(),
+            )
+        }
     } else {
         let fs_ref = ctx.thread_local.borrow_fs();
         let fs_resolver = fs_ref.resolver().read();
         let fs_path = FsPath::new(dfd, &filename)?;
-        if flags.contains(OpenFlags::AT_SYMLINK_NOFOLLOW) {
+        let path = if flags.contains(OpenFlags::AT_SYMLINK_NOFOLLOW) {
             fs_resolver.lookup_no_follow(&fs_path)?
         } else {
             fs_resolver.lookup(&fs_path)?
-        }
+        };
+        (path.abs_path(), path.inode().clone())
     };
 
-    check_executable_file(&path)?;
+    // check_executable_file(&path)?;
 
     Ok(path)
 }
 
 fn do_execve(
-    elf_file: Path,
+    elf_file: (String, Arc<dyn Inode>),
     argv_ptr_ptr: Vaddr,
     envp_ptr_ptr: Vaddr,
     ctx: &Context,
@@ -95,7 +107,7 @@ fn do_execve(
         ..
     } = ctx;
 
-    let executable_path = elf_file.abs_path();
+    let (executable_path, elf_file) = elf_file;
     // FIXME: A malicious user could cause a kernel panic by exhausting available memory.
     // Currently, the implementation reads up to `MAX_NR_STRING_ARGS` arguments, each up to
     // `MAX_LEN_STRING_ARG` in length, without first verifying the total combined size.
@@ -138,8 +150,7 @@ fn do_execve(
         parent.children_wait_queue().wake_all();
     }
 
-    let (new_executable_path, elf_load_info) =
-        program_to_load.load_to_vm(process.vm(), &fs_resolver)?;
+    let elf_load_info = program_to_load.load_to_vm(process.vm(), &fs_resolver)?;
 
     // After the program has been successfully loaded, the virtual memory of the current process
     // is initialized. Hence, it is necessary to clear the previously recorded robust list.
@@ -155,7 +166,7 @@ fn do_execve(
     credentials.set_keep_capabilities(false);
 
     // set executable path
-    process.set_executable_path(new_executable_path);
+    process.set_executable_path(executable_path);
     // set signal disposition to default
     process.sig_dispositions().lock().inherit();
     // set cpu context to default
@@ -219,7 +230,7 @@ fn read_cstring_vec(
 fn set_uid_from_elf(
     current: &Process,
     credentials: &Credentials<WriteOp>,
-    elf_file: &Path,
+    elf_file: &Arc<dyn Inode>,
 ) -> Result<()> {
     if elf_file.mode()?.has_set_uid() {
         let uid = elf_file.owner()?;
@@ -237,7 +248,7 @@ fn set_uid_from_elf(
 fn set_gid_from_elf(
     current: &Process,
     credentials: &Credentials<WriteOp>,
-    elf_file: &Path,
+    elf_file: &Arc<dyn Inode>,
 ) -> Result<()> {
     if elf_file.mode()?.has_set_gid() {
         let gid = elf_file.group()?;

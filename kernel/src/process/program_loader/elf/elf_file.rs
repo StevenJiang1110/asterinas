@@ -7,7 +7,7 @@ use xmas_elf::{
 };
 
 use crate::{
-    fs::{path::Path, utils::PATH_MAX},
+    fs::utils::{Inode, PATH_MAX},
     prelude::*,
 };
 pub struct ElfHeaders {
@@ -93,7 +93,7 @@ impl ElfHeaders {
     }
 
     /// Reads the LDSO path from the ELF file.
-    pub fn read_ldso_path(&self, elf_file: &Path) -> Result<Option<CString>> {
+    pub fn read_ldso_path(&self, elf_file: &Arc<dyn Inode>) -> Result<Option<CString>> {
         for program_header in &self.program_headers {
             let type_ = program_header.get_type().map_err(|_| {
                 Error::with_message(Errno::ENOEXEC, "parse program header type fails")
@@ -109,7 +109,7 @@ impl ElfHeaders {
                     );
                 }
 
-                let inode = elf_file.inode();
+                let inode = elf_file;
                 let mut buffer = vec![0; file_size];
                 inode.read_bytes_at(file_offset, &mut buffer)?;
 

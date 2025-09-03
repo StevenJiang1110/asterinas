@@ -18,6 +18,7 @@ use crate::{
     fs::{
         fs_resolver::{FsPath, FsResolver, AT_FDCWD},
         path::Path,
+        utils::Inode,
     },
     prelude::*,
     process::{
@@ -39,7 +40,7 @@ use crate::{
 /// initialize process init stack.
 pub fn load_elf_to_vm(
     process_vm: &ProcessVm,
-    elf_file: Path,
+    elf_file: Arc<dyn Inode>,
     fs_resolver: &FsResolver,
     elf_headers: ElfHeaders,
     argv: Vec<CString>,
@@ -93,13 +94,15 @@ pub fn load_elf_to_vm(
 
 fn lookup_and_parse_ldso(
     headers: &ElfHeaders,
-    elf_file: &Path,
+    elf_file: &Arc<dyn Inode>,
     fs_resolver: &FsResolver,
-) -> Result<Option<(Path, ElfHeaders)>> {
+) -> Result<Option<(Arc<dyn Inode>, ElfHeaders)>> {
     let ldso_file = {
         let Some(ldso_path) = headers.read_ldso_path(elf_file)? else {
+            println!("ldso_path is none");
             return Ok(None);
         };
+        println!("ldso_path = {:?}", ldso_path);
         // Our FS requires the path to be valid UTF-8. This may be too restrictive.
         let ldso_path = ldso_path.into_string().map_err(|_| {
             Error::with_message(
@@ -116,12 +119,12 @@ fn lookup_and_parse_ldso(
         inode.read_bytes_at(0, &mut *buf)?;
         ElfHeaders::parse_elf(&*buf)?
     };
-    Ok(Some((ldso_file, ldso_elf)))
+    Ok(Some((ldso_file.inode().clone(), ldso_elf)))
 }
 
 fn load_ldso(
     root_vmar: &Vmar<Full>,
-    ldso_file: &Path,
+    ldso_file: &Arc<dyn Inode>,
     ldso_elf: &ElfHeaders,
 ) -> Result<LdsoLoadInfo> {
     let range = map_segment_vmos(ldso_elf, root_vmar, ldso_file)?;
@@ -142,9 +145,9 @@ fn load_ldso(
 /// Returns the mapped range, the entry point and the auxiliary vector.
 fn init_and_map_vmos(
     process_vm: &ProcessVm,
-    ldso: Option<(Path, ElfHeaders)>,
+    ldso: Option<(Arc<dyn Inode>, ElfHeaders)>,
     parsed_elf: &ElfHeaders,
-    elf_file: &Path,
+    elf_file: &Arc<dyn Inode>,
 ) -> Result<(RelocatedRange, Vaddr, AuxVec)> {
     let process_vmar = process_vm.lock_root_vmar();
     let root_vmar = process_vmar.unwrap();
@@ -208,7 +211,7 @@ pub struct ElfLoadInfo {
 pub fn map_segment_vmos(
     elf: &ElfHeaders,
     root_vmar: &Vmar<Full>,
-    elf_file: &Path,
+    elf_file: &Arc<dyn Inode>,
 ) -> Result<RelocatedRange> {
     let elf_va_range = get_range_for_all_segments(elf)?;
 
@@ -323,7 +326,7 @@ fn get_range_for_all_segments(elf: &ElfHeaders) -> Result<Range<Vaddr>> {
 /// If needed, create additional anonymous mapping to represents .bss segment.
 fn map_segment_vmo(
     program_header: &ProgramHeader64,
-    elf_file: &Path,
+    elf_file: &Arc<dyn Inode>,
     root_vmar: &Vmar<Full>,
     map_at: Vaddr,
 ) -> Result<()> {
@@ -344,7 +347,7 @@ fn map_segment_vmo(
     let virtual_addr = program_header.virtual_addr as usize;
     debug_assert!(file_offset % PAGE_SIZE == virtual_addr % PAGE_SIZE);
     let segment_vmo = {
-        let inode = elf_file.inode();
+        let inode = elf_file;
         inode
             .page_cache()
             .ok_or(Error::with_message(
