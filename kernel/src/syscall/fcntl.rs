@@ -11,6 +11,7 @@ use crate::{
     },
     prelude::*,
     process::{process_table, Pid},
+    vm::memfd::MemfdFile,
 };
 
 pub fn sys_fcntl(fd: FileDesc, cmd: i32, arg: u64, ctx: &Context) -> Result<SyscallReturn> {
@@ -31,7 +32,24 @@ pub fn sys_fcntl(fd: FileDesc, cmd: i32, arg: u64, ctx: &Context) -> Result<Sysc
         }),
         FcntlCmd::F_GETOWN => handle_getown(fd, ctx),
         FcntlCmd::F_SETOWN => handle_setown(fd, arg, ctx),
+        FcntlCmd::F_ADD_SEALS => {
+            warn!("F_ADD_SEALS is not supported");
+            return Ok(SyscallReturn::Return(0));
+        },
+        FcntlCmd::F_GET_SEALS => handle_get_seals(fd, ctx),
     }
+}
+
+fn handle_get_seals(fd: FileDesc, ctx: &Context) -> Result<SyscallReturn> {
+    let mut file_table = ctx.thread_local.borrow_file_table_mut();
+    file_table.read_with(|inner| {
+        let file = inner.get_file(fd)?.clone();
+        let _memfd_file = Arc::downcast::<MemfdFile>(file)
+            .map_err(|_| Error::with_message(Errno::EINVAL, "not a memfd file"))?;
+
+        // Hardcoded value: F_SEAL_SEAL|F_SEAL_SHRINK|F_SEAL_GROW|F_SEAL_WRITE
+        Ok(SyscallReturn::Return(0xf))
+    })
 }
 
 fn handle_dupfd(fd: FileDesc, arg: u64, flags: FdFlags, ctx: &Context) -> Result<SyscallReturn> {
@@ -177,6 +195,8 @@ enum FcntlCmd {
     F_SETOWN = 8,
     F_GETOWN = 9,
     F_DUPFD_CLOEXEC = 1030,
+    F_ADD_SEALS = 1033,
+    F_GET_SEALS = 1034,
 }
 
 #[expect(non_camel_case_types)]
