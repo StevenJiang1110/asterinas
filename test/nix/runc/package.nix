@@ -18,7 +18,7 @@ buildGoModule rec {
 
   buildInputs = [ libselinux libseccomp libapparmor ];
 
-  makeFlags = [ "BUILDTAGS+=seccomp" ];
+  makeFlags = [ "BUILDTAGS=0" ];
 
   buildPhase = ''
     runHook preBuild

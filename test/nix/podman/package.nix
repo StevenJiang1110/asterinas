@@ -71,9 +71,9 @@ in buildGoModule rec {
     patchShebangs .
     substituteInPlace Makefile --replace "/bin/bash" "${runtimeShell}"
     ${if stdenv.hostPlatform.isDarwin then ''
-      make podman-remote # podman-mac-helper uses FHS paths
+      make BUILDTAGS="exclude_graphdriver_btrfs exclude_graphdriver_devicemapper" podman-remote # podman-mac-helper uses FHS paths
     '' else ''
-      make bin/podman bin/rootlessport bin/quadlet
+      make BUILDTAGS="exclude_graphdriver_btrfs exclude_graphdriver_devicemapper" bin/podman bin/rootlessport bin/quadlet
     ''}
     make docs
     runHook postBuild
