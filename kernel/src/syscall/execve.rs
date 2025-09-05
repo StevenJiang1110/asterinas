@@ -9,15 +9,17 @@ use ostd::{
 use super::{constants::*, SyscallReturn};
 use crate::{
     fs::{
-        file_table::{get_file_fast, FileDesc},
+        file_table::{get_file_fast, FileDesc, WithFileTable},
         fs_resolver::{FsPath, AT_FDCWD},
-        path::Path,
+        path::{Dentry, Mount, MountNamespace, Path},
+        ramfs::RamFS,
     },
     prelude::*,
     process::{
         check_executable_file, posix_thread::ThreadName, renew_vm_and_map, Credentials, Process,
         ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS,
     },
+    vm::memfd::MemfdFile,
 };
 
 pub fn sys_execve(
@@ -62,9 +64,30 @@ fn lookup_executable_file(
     ctx: &Context,
 ) -> Result<Path> {
     let path = if flags.contains(OpenFlags::AT_EMPTY_PATH) && filename.is_empty() {
+        println!("execveat empty path, fd = {}", dfd);
         let mut file_table = ctx.thread_local.borrow_file_table_mut();
-        let file = get_file_fast!(&mut file_table, dfd);
-        file.as_inode_or_err()?.path().clone()
+        let mut file_table_locked = file_table.unwrap().write();
+        file_table_locked.remove_cloexec_flag(dfd);
+        let file = file_table_locked.get_file(dfd)?;
+        match file.as_inode_or_err() {
+            Ok(inode_handle) => inode_handle.path().clone(),
+            Err(e) => {
+                let Ok(memfd_file) = Arc::downcast::<MemfdFile>(file.clone()) else {
+                    return Err(e);
+                };
+                println!("execveat memfd file, fd = {}", dfd);
+                let inode = memfd_file.inode.clone();
+
+                let root_mount = {
+                    let rootfs = RamFS::new();
+                    Mount::new_root(rootfs, Weak::new())
+                };
+                Path {
+                    mount: root_mount,
+                    dentry: Dentry::new_root(inode),
+                }
+            }
+        }
     } else {
         let fs_ref = ctx.thread_local.borrow_fs();
         let fs_resolver = fs_ref.resolver().read();

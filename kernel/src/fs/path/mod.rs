@@ -11,7 +11,7 @@ pub use mount_namespace::MountNamespace;
 
 use crate::{
     fs::{
-        path::dentry::{Dentry, DentryKey},
+        path::dentry::DentryKey,
         utils::{
             FileSystem, Inode, InodeMode, InodeType, Metadata, MknodType, Permission, XattrName,
             XattrNamespace, XattrSetFlags, NAME_MAX,
@@ -25,14 +25,16 @@ mod dentry;
 mod mount;
 mod mount_namespace;
 
+pub use dentry::Dentry;
+
 /// A `Path` is used to represent an exact location in the VFS tree.
 ///
 /// Each `Path` corresponds to a node in the VFS tree, and a single node
 /// may have multiple `Path` instances referencing it due to mount operations.
 #[derive(Debug, Clone)]
 pub struct Path {
-    mount: Arc<Mount>,
-    dentry: Arc<Dentry>,
+    pub mount: Arc<Mount>,
+    pub dentry: Arc<Dentry>,
 }
 
 impl Path {

@@ -442,6 +442,7 @@ impl Debug for PageCacheManager {
 
 impl Pager for PageCacheManager {
     fn commit_page(&self, idx: usize) -> Result<UFrame> {
+        // println!("commit page: {}", idx);
         self.ondemand_readahead(idx)
     }
 

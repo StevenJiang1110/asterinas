@@ -102,6 +102,14 @@ impl FileTable {
         self.close_files(|entry| entry.flags().contains(FdFlags::CLOEXEC))
     }
 
+    pub fn remove_cloexec_flag(&mut self, fd: FileDesc) {
+        let entry = self.table.get(fd as usize).unwrap();
+        let old_flags = entry.flags();
+        if old_flags.contains(FdFlags::CLOEXEC) {
+            entry.set_flags(old_flags - FdFlags::CLOEXEC);
+        }
+    }
+
     fn close_files<F>(&mut self, should_close: F) -> Vec<Arc<dyn FileLike>>
     where
         F: Fn(&FileTableEntry) -> bool,

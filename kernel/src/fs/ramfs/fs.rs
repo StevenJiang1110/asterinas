@@ -233,6 +233,10 @@ impl InodeMeta {
     }
 
     pub fn resize(&mut self, new_size: usize) {
+        println!(
+            "resize inde: old size = 0x{:x}, new_size = 0x{:x}",
+            self.size, new_size
+        );
         self.size = new_size;
         self.blocks = new_size.align_up(BLOCK_SIZE) / BLOCK_SIZE;
     }
@@ -554,7 +558,22 @@ impl Inode for RamInode {
                     // timestamps here. Please adjust this behavior accordingly if there are special devices.
                 }
                 Inner::NamedPipe(named_pipe) => named_pipe.read(writer)?,
-                _ => return_errno_with_message!(Errno::EISDIR, "read is not supported"),
+                _ => {
+                    match &self.inner {
+                        Inner::File(..) | Inner::Device(..) | Inner::NamedPipe(..) => todo!(),
+                        Inner::Dir(_) => {
+                            println!("dir entry");
+                        }
+
+                        Inner::SymLink(spin_lock) => {
+                            println!("symlink: {}", spin_lock.lock().as_str());
+                        }
+                        Inner::Socket => {
+                            println!("socket:")
+                        }
+                    }
+                    return_errno_with_message!(Errno::EISDIR, "read is not supported")
+                }
             }
         };
 

@@ -30,7 +30,7 @@ use crate::{
 pub const MAX_MEMFD_NAME_LEN: usize = 249;
 
 pub struct MemfdFile {
-    inode: Arc<dyn Inode>,
+    pub inode: Arc<dyn Inode>,
     #[expect(dead_code)]
     name: String,
     offset: Mutex<usize>,

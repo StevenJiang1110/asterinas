@@ -57,10 +57,7 @@ impl Mount {
     ///
     /// It is allowed to create a mount node even if the fs has been provided to another
     /// mount node. It is the fs's responsibility to ensure the data consistency.
-    pub(in crate::fs) fn new_root(
-        fs: Arc<dyn FileSystem>,
-        mnt_ns: Weak<MountNamespace>,
-    ) -> Arc<Self> {
+    pub fn new_root(fs: Arc<dyn FileSystem>, mnt_ns: Weak<MountNamespace>) -> Arc<Self> {
         Self::new(fs, None, mnt_ns)
     }
 
