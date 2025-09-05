@@ -229,6 +229,10 @@ impl InodeMeta {
     }
 
     pub fn resize(&mut self, new_size: usize) {
+        println!(
+            "resize inde: old size = 0x{:x}, new_size = 0x{:x}",
+            self.size, new_size
+        );
         self.size = new_size;
         self.blocks = new_size.align_up(BLOCK_SIZE) / BLOCK_SIZE;
     }

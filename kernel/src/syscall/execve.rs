@@ -11,13 +11,15 @@ use crate::{
     fs::{
         file_table::{get_file_fast, FileDesc},
         fs_resolver::{FsPath, AT_FDCWD},
-        path::Path,
+        path::{Dentry, Path},
+        rootfs::root_mount,
     },
     prelude::*,
     process::{
         check_executable_file, posix_thread::ThreadName, renew_vm_and_map, Credentials, Process,
         ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS,
     },
+    vm::memfd::MemfdFile,
 };
 
 pub fn sys_execve(
@@ -64,7 +66,21 @@ fn lookup_executable_file(
     let path = if flags.contains(OpenFlags::AT_EMPTY_PATH) && filename.is_empty() {
         let mut file_table = ctx.thread_local.borrow_file_table_mut();
         let file = get_file_fast!(&mut file_table, dfd);
-        file.as_inode_or_err()?.path().clone()
+        match file.as_inode_or_err() {
+            Ok(inode_handle) => inode_handle.path().clone(),
+            Err(e) => {
+                let file = file.as_ref().clone();
+                let Ok(memfd_file) = Arc::downcast::<MemfdFile>(file) else {
+                    return Err(e);
+                };
+                let inode = memfd_file.inode.clone();
+
+                Path {
+                    mount: root_mount().clone(),
+                    dentry: Dentry::new_root(inode),
+                }
+            }
+        }
     } else {
         let fs_ref = ctx.thread_local.borrow_fs();
         let fs_resolver = fs_ref.resolver().read();

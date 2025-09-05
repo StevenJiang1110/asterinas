@@ -21,7 +21,8 @@ OSTD_TASK_STACK_SIZE_IN_PAGES ?= 64
 FEATURES ?=
 NO_DEFAULT_FEATURES ?= 0
 COVERAGE ?= 0
-ENABLE_BASIC_TEST ?= false
+ENABLE_BASIC_TEST ?= true
+INITRAMFS_SKIP_GZIP = 1
 # End of global build options.
 
 # GDB debugging and profiling options.
@@ -147,11 +148,11 @@ else
 CARGO_OSDK_COMMON_ARGS += --grub-boot-protocol=$(BOOT_PROTOCOL)
 endif
 
-ifeq ($(ENABLE_KVM), 1)
-	ifeq ($(OSDK_TARGET_ARCH), x86_64)
-		CARGO_OSDK_COMMON_ARGS += --qemu-args="-accel kvm"
-	endif
-endif
+# ifeq ($(ENABLE_KVM), 1)
+# 	ifeq ($(OSDK_TARGET_ARCH), x86_64)
+# 		CARGO_OSDK_COMMON_ARGS += --qemu-args="-accel kvm"
+# 	endif
+# endif
 
 # Skip GZIP to make encoding and decoding of initramfs faster
 ifeq ($(INITRAMFS_SKIP_GZIP),1)

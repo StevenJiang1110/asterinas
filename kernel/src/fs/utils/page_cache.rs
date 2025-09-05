@@ -123,7 +123,7 @@ impl Drop for PageCache {
         // The default destruction procedure exhibits slow performance.
         // In contrast, resizing the `VMO` to zero greatly accelerates the process.
         // We need to find out the underlying cause of this discrepancy.
-        let _ = self.pages.resize(0);
+        // let _ = self.pages.resize(0);
     }
 }
 
@@ -442,6 +442,7 @@ impl Debug for PageCacheManager {
 
 impl Pager for PageCacheManager {
     fn commit_page(&self, idx: usize) -> Result<UFrame> {
+        // println!("commit page: {}", idx);
         self.ondemand_readahead(idx)
     }
 
