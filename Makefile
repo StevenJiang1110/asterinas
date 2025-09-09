@@ -141,11 +141,11 @@ else
 CARGO_OSDK_COMMON_ARGS += --grub-boot-protocol=$(BOOT_PROTOCOL)
 endif
 
-# ifeq ($(ENABLE_KVM), 1)
-# 	ifeq ($(OSDK_TARGET_ARCH), x86_64)
-# 		CARGO_OSDK_COMMON_ARGS += --qemu-args="-accel kvm"
-# 	endif
-# endif
+ifeq ($(ENABLE_KVM), 1)
+	ifeq ($(OSDK_TARGET_ARCH), x86_64)
+		CARGO_OSDK_COMMON_ARGS += --qemu-args="-accel kvm"
+	endif
+endif
 
 # Skip GZIP to make encoding and decoding of initramfs faster
 ifeq ($(INITRAMFS_SKIP_GZIP),1)

@@ -16,6 +16,7 @@ let
   podman = callPackage podman/package.nix {
     conmon = callPackage conmon/package.nix { };
     runc = callPackage runc/package.nix { };
+    crun = callPackage crun/package.nix { };
   };
   all_pkgs = [ busybox etc podman ]
     ++ lib.optionals (apps != null) [ apps.package ]

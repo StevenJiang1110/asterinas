@@ -25,6 +25,7 @@ let
       netavark
       passt
       conmon
+      crun
     ] ++ extraRuntimes;
   };
 in buildGoModule rec {
