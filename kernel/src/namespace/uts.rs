@@ -8,7 +8,7 @@ use crate::{
 
 /// The UTS namespace.
 pub struct UtsNamespace {
-    uts_name: UtsName,
+    uts_name: Mutex<UtsName>,
     owner: Arc<UserNamespace>,
 }
 
@@ -31,7 +31,7 @@ impl UtsNamespace {
         copy_slice(b"x86_64", &mut uts_name.machine);
         copy_slice(b"", &mut uts_name.domainname);
 
-        Arc::new(Self { uts_name, owner })
+        Arc::new(Self { uts_name: Mutex::new(uts_name), owner })
     }
 
     /// Clones a new UTS namespace.
@@ -42,7 +42,7 @@ impl UtsNamespace {
     ) -> Result<Arc<Self>> {
         owner.check_cap(CapSet::SYS_ADMIN, posix_thread)?;
         Ok(Arc::new(Self {
-            uts_name: self.uts_name,
+            uts_name: Mutex::new(*self.uts_name.lock()),
             owner,
         }))
     }
@@ -53,7 +53,7 @@ impl UtsNamespace {
     }
 
     /// Returns the UTS name.
-    pub fn uts_name(&self) -> &UtsName {
+    pub fn uts_name(&self) -> &Mutex<UtsName> {
         &self.uts_name
     }
 }
@@ -64,11 +64,11 @@ const UTS_FIELD_LEN: usize = 65;
 #[repr(C)]
 pub struct UtsName {
     sysname: [u8; UTS_FIELD_LEN],
-    nodename: [u8; UTS_FIELD_LEN],
+    pub nodename: [u8; UTS_FIELD_LEN],
     release: [u8; UTS_FIELD_LEN],
     version: [u8; UTS_FIELD_LEN],
     machine: [u8; UTS_FIELD_LEN],
-    domainname: [u8; UTS_FIELD_LEN],
+    pub domainname: [u8; UTS_FIELD_LEN],
 }
 
 impl UtsName {
