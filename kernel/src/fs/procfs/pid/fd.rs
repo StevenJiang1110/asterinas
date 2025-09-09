@@ -110,6 +110,7 @@ impl FileSymOps {
 impl SymOps for FileSymOps {
     fn read_link(&self) -> Result<String> {
         let path_name = if let Some(inode_handle) = self.0.downcast_ref::<InodeHandle>() {
+            println!("/proc/pid/fd readlink: {}", inode_handle.path().abs_path());
             inode_handle.path().abs_path()
         } else {
             // TODO: get the real path for other FileLike object

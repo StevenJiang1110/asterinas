@@ -95,10 +95,6 @@ impl FsType for CgroupFsType {
         _disk: Option<Arc<dyn BlockDevice>>,
         _ctx: &Context,
     ) -> Result<Arc<dyn FileSystem>> {
-        if super::CGROUP_SINGLETON.is_completed() {
-            return_errno_with_message!(Errno::EBUSY, "the cgroupfs has been created");
-        }
-
         let cgroupfs = CgroupFs::new(self.systree_root.clone());
         super::CGROUP_SINGLETON.call_once(|| cgroupfs.clone());
 

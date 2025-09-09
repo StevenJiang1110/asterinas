@@ -78,10 +78,6 @@ impl FsType for SysFsType {
         _disk: Option<Arc<dyn aster_block::BlockDevice>>,
         _ctx: &Context,
     ) -> Result<Arc<dyn FileSystem>> {
-        if super::SYSFS_SINGLETON.is_completed() {
-            return_errno_with_message!(Errno::EBUSY, "the sysfs has been created");
-        }
-
         super::SYSFS_SINGLETON.call_once(SysFs::new);
         Ok(super::singleton().clone())
     }

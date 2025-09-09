@@ -3,9 +3,7 @@
 use super::SyscallReturn;
 use crate::{
     fs::{
-        file_table::{FdFlags, FileDesc},
-        fs_resolver::{FsPath, AT_FDCWD},
-        utils::{AccessMode, CreationFlags},
+        file_handle::FileLike, file_table::{FdFlags, FileDesc}, fs_resolver::{FsPath, AT_FDCWD}, utils::{AccessMode, CreationFlags}
     },
     prelude::*,
     syscall::constants::MAX_FILENAME_LEN,
@@ -28,6 +26,18 @@ pub fn sys_openat(
         return_errno_with_message!(Errno::ENOENT, "openat fails with empty path");
     }
 
+    if path == CString::new("/proc/self/exe").unwrap() {
+        println!("open /proc/self/exe");
+
+        let executable = ctx.process.executable.lock();
+        if let Some(file) = executable.as_ref() {
+            println!("open executable of current processs");
+            let filelike = file.clone();
+            let fd = insert_file_like(ctx, filelike, flags);
+            return Ok(SyscallReturn::Return(fd as _));
+        }
+    }
+
     let file_handle = {
         let path = path.to_string_lossy();
         let fs_path = FsPath::new(dirfd, path.as_ref())?;
@@ -44,8 +54,13 @@ pub fn sys_openat(
         Arc::new(inode_handle)
     };
 
-    let fd = {
-        let file_table = ctx.thread_local.borrow_file_table();
+    let fd = insert_file_like(ctx, file_handle, flags);
+
+    Ok(SyscallReturn::Return(fd as _))
+}
+
+fn insert_file_like(ctx: &Context, filelike: Arc<dyn FileLike>, flags: u32) -> FileDesc {
+    let file_table = ctx.thread_local.borrow_file_table();
         let mut file_table_locked = file_table.unwrap().write();
         let fd_flags =
             if CreationFlags::from_bits_truncate(flags).contains(CreationFlags::O_CLOEXEC) {
@@ -53,10 +68,7 @@ pub fn sys_openat(
             } else {
                 FdFlags::empty()
             };
-        file_table_locked.insert(file_handle, fd_flags)
-    };
-
-    Ok(SyscallReturn::Return(fd as _))
+        file_table_locked.insert(filelike, fd_flags)
 }
 
 pub fn sys_open(path_addr: Vaddr, flags: u32, mode: u16, ctx: &Context) -> Result<SyscallReturn> {

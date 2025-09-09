@@ -9,10 +9,7 @@ use ostd::{
 use super::{constants::*, SyscallReturn};
 use crate::{
     fs::{
-        file_table::{get_file_fast, FileDesc, WithFileTable},
-        fs_resolver::{FsPath, AT_FDCWD},
-        path::{Dentry, Mount, MountNamespace, Path},
-        ramfs::RamFS,
+        file_handle::FileLike, file_table::{get_file_fast, FileDesc, WithFileTable}, fs_resolver::{FsPath, AT_FDCWD}, path::{Dentry, Mount, MountNamespace, Path}, ramfs::RamFS
     },
     prelude::*,
     process::{
@@ -76,6 +73,8 @@ fn lookup_executable_file(
                     return Err(e);
                 };
                 println!("execveat memfd file, fd = {}", dfd);
+
+                *ctx.process.executable.lock() = Some(memfd_file.clone() as Arc<dyn FileLike>);
                 let inode = memfd_file.inode.clone();
 
                 let root_mount = {

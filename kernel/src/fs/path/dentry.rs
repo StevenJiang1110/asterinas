@@ -64,7 +64,7 @@ impl Dentry {
     /// Gets the name of the `Dentry`.
     ///
     /// Returns "/" if it is a root `Dentry`.
-    pub(super) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self.name_and_parent.read().as_ref() {
             Some(name_and_parent) => name_and_parent.0.clone(),
             None => String::from("/"),

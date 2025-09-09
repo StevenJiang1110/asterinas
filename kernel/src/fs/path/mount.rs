@@ -36,7 +36,7 @@ pub struct Mount {
     root_dentry: Arc<Dentry>,
     /// Mountpoint dentry. A mount node can be mounted on one dentry of another mount node,
     /// which makes the mount being the child of the mount node.
-    mountpoint: RwLock<Option<Arc<Dentry>>>,
+    pub mountpoint: RwLock<Option<Arc<Dentry>>>,
     /// The associated FS.
     fs: Arc<dyn FileSystem>,
     /// The parent mount node.

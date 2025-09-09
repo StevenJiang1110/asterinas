@@ -17,7 +17,7 @@ use super::{
     task_set::TaskSet,
 };
 use crate::{
-    fs::cgroupfs::CgroupNode,
+    fs::{cgroupfs::CgroupNode, file_handle::FileLike},
     prelude::*,
     process::{signal::Pollee, status::StopWaitStatus, WaitOptions},
     sched::{AtomicNice, Nice},
@@ -80,6 +80,7 @@ pub struct Process {
     // Mutable Part
     /// The executable path.
     executable_path: RwLock<String>,
+    pub executable: Mutex<Option<Arc<dyn FileLike>>>,
     /// The threads
     tasks: Mutex<TaskSet>,
     /// Process status
@@ -219,6 +220,7 @@ impl Process {
             pid,
             tasks: Mutex::new(TaskSet::new()),
             executable_path: RwLock::new(executable_path),
+            executable: Mutex::new(None),
             process_vm,
             children_wait_queue,
             pidfile_pollee: Pollee::new(),
