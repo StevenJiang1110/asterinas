@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use core::sync::atomic::Ordering;
+
 use ostd::{
     cpu::context::UserContext,
     sync::Waiter,
@@ -13,8 +15,9 @@ use crate::{
     current_userspace,
     prelude::*,
     process::{
-        posix_thread::{AsPosixThread, AsThreadLocal, ThreadLocal},
+        posix_thread::{do_exit, AsPosixThread, AsThreadLocal, ThreadLocal},
         signal::handle_pending_signal,
+        TermStatus,
     },
     syscall::handle_syscall,
     thread::{exception::handle_exception, AsThread},
@@ -100,9 +103,13 @@ pub fn create_new_user_task(
             if current_thread.is_exited() {
                 break;
             }
-
-            // Handle signals
-            handle_pending_signal(user_ctx, &ctx, syscall_number);
+            
+            // Handle force execve exit
+            if ctx.posix_thread.force_execve_exit.load(Ordering::Acquire) {
+                do_exit(TermStatus::Exited(0));
+            } else {
+                handle_pending_signal(user_ctx, &ctx, syscall_number);
+            }
 
             // Handle signals while the thread is stopped
             // FIXME: Currently, we handle all signals when the process is stopped.

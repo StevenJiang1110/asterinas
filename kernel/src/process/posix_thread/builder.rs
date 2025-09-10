@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use core::sync::atomic::AtomicU32;
+use core::sync::atomic::{AtomicBool, AtomicU32};
 
 use ostd::{
     cpu::{
@@ -189,6 +189,7 @@ impl PosixThreadBuilder {
                     prof_timer_manager,
                     io_priority: AtomicU32::new(0),
                     ns_context: Mutex::new(Some(ns_context.clone())),
+                    force_execve_exit: AtomicBool::new(false),
                 }
             };
 

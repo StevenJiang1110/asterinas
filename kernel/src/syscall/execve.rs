@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use core::sync::atomic::Ordering;
+
 use aster_rights::WriteOp;
 use ostd::{
     cpu::context::{FpuContext, GeneralRegs, UserContext},
+    task::Task,
     user::UserContextApi,
 };
 
@@ -17,9 +20,9 @@ use crate::{
     },
     prelude::*,
     process::{
-        check_executable_file, posix_thread::ThreadName, renew_vm_and_map, Credentials, Process,
-        ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS,
+        check_executable_file, posix_thread::{AsPosixThread, ThreadName}, renew_vm_and_map, signal::{constants::SIGKILL, signals::kernel::KernelSignal}, Credentials, Process, ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS
     },
+    thread::AsThread,
     vm::memfd::MemfdFile,
 };
 
@@ -139,6 +142,39 @@ fn do_execve(
     // clear ctid
     // FIXME: should we clear ctid when execve?
     thread_local.clear_child_tid().set(0);
+
+    // Stop other threads in the same process.
+    let main_thread = ctx.process.main_thread();
+    let current_thread = current_thread!();
+    assert!(Arc::ptr_eq(&main_thread, &current_thread));
+
+    for task in ctx.process.tasks().lock().as_slice() {
+        let thread = task.as_thread().unwrap();
+        if Arc::ptr_eq(thread, &current_thread) {
+            continue;
+        }
+
+        let posix_thread = thread.as_posix_thread().unwrap();
+        posix_thread
+            .force_execve_exit
+            .store(true, Ordering::Relaxed);
+        posix_thread.enqueue_signal(Box::new(KernelSignal::new(SIGKILL)));
+    }
+
+    ctx.process
+        .execve_wait_queue
+        .pause_until(|| (ctx.process.tasks().lock().as_slice().len() == 1).then_some(()))
+        .unwrap();
+
+    let task = ctx
+        .process
+        .tasks()
+        .lock()
+        .as_slice()
+        .get(0)
+        .unwrap()
+        .clone();
+    assert!(Arc::ptr_eq(&Task::current().unwrap().cloned(), &task));
 
     // Ensure that the file descriptors with the close-on-exec flag are closed.
     // FIXME: This is just wrong if the file table is shared with other processes.

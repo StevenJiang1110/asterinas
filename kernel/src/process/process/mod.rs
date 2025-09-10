@@ -19,7 +19,7 @@ use super::{
 use crate::{
     fs::{cgroupfs::CgroupNode, file_handle::FileLike},
     prelude::*,
-    process::{signal::Pollee, status::StopWaitStatus, WaitOptions},
+    process::{signal::{constants::SIGCHLD, Pollee}, status::StopWaitStatus, WaitOptions},
     sched::{AtomicNice, Nice},
     thread::{AsThread, Thread},
     time::clocks::ProfClock,
@@ -131,6 +131,8 @@ pub struct Process {
 
     /// A manager that manages timer resources and utilities of the process.
     timer_manager: PosixTimerManager,
+
+    pub execve_wait_queue: WaitQueue,
 }
 
 /// Representing a parent process by holding a weak reference to it and its PID.
@@ -238,6 +240,7 @@ impl Process {
             nice: AtomicNice::new(nice),
             timer_manager: PosixTimerManager::new(&prof_clock, process_ref),
             prof_clock,
+            execve_wait_queue: WaitQueue::new(),
         })
     }
 
@@ -639,7 +642,7 @@ impl Process {
 
         // Drop the signal if it's ignored. See explanation at `enqueue_signal_locked`.
         let signum = signal.num();
-        if sig_dispositions.get(signum).will_ignore(signum) {
+        if sig_dispositions.get(signum).will_ignore(signum){
             return;
         }
 

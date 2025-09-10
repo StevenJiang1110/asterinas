@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use aster_rights::{ReadDupOp, ReadOp, WriteOp};
 use ostd::sync::{RoArc, RwMutexReadGuard, Waker};
@@ -84,6 +84,8 @@ pub struct PosixThread {
 
     /// The namespaces that the thread belongs to.
     ns_context: Mutex<Option<Arc<NsContext>>>,
+
+    pub force_execve_exit: AtomicBool,
 }
 
 impl PosixThread {

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use core::sync::atomic::Ordering;
+
 use ostd::task::{CurrentTask, Task};
 
 use super::{
@@ -87,6 +89,8 @@ fn exit_internal(term_status: TermStatus, is_exiting_group: bool) {
     *thread_local.root_vmar().borrow_mut() = None;
     thread_local.borrow_file_table_mut().remove();
     thread_local.borrow_ns_context_mut().remove();
+
+    posix_process.execve_wait_queue.wake_all();
 
     if is_last_thread {
         exit_process(&posix_process);
