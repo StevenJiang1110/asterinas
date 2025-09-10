@@ -2,8 +2,6 @@
 
 //! System call dispatch in the x86 architecture.
 
-use crate::syscall::sethostname::sys_sethostname;
-
 use super::{
     accept::{sys_accept, sys_accept4},
     access::{sys_access, sys_faccessat, sys_faccessat2},
@@ -170,6 +168,7 @@ use super::{
     waitid::sys_waitid,
     write::sys_write,
 };
+use crate::syscall::sethostname::sys_sethostname;
 
 impl_syscall_nums_and_dispatch_fn! {
     SYS_READ = 0               => sys_read(args[..3]);

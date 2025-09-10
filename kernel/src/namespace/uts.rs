@@ -31,7 +31,10 @@ impl UtsNamespace {
         copy_slice(b"x86_64", &mut uts_name.machine);
         copy_slice(b"", &mut uts_name.domainname);
 
-        Arc::new(Self { uts_name: Mutex::new(uts_name), owner })
+        Arc::new(Self {
+            uts_name: Mutex::new(uts_name),
+            owner,
+        })
     }
 
     /// Clones a new UTS namespace.

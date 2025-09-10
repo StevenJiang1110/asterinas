@@ -43,6 +43,7 @@ impl FileLike for NamedPipe {
     }
 
     fn write(&self, reader: &mut VmReader) -> Result<usize> {
+        println!("write to named pipe: {}", reader.remain());
         self.writer.write(reader)
     }
 

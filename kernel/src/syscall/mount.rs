@@ -46,7 +46,11 @@ pub fn sys_mount(
             .lookup(&fs_path)?
     };
 
-    println!("mount flags = {:?}, dst_path = {:?}", mount_flags, dst_path.abs_path());
+    println!(
+        "mount flags = {:?}, dst_path = {:?}",
+        mount_flags,
+        dst_path.abs_path()
+    );
 
     if mount_flags.contains(MountFlags::MS_REMOUNT) && mount_flags.contains(MountFlags::MS_BIND) {
         do_reconfigure_mnt()?;

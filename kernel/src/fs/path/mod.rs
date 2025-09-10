@@ -124,7 +124,7 @@ impl Path {
     /// If it is the root of a mount, it will go up to the mountpoint
     /// to get the name of the mountpoint recursively.
     fn effective_name(&self) -> String {
-        if !self.dentry.is_mount_root() && !Arc::ptr_eq(&self.dentry ,&self.mount.root_dentry()){
+        if !self.dentry.is_mount_root() && !Arc::ptr_eq(&self.dentry, &self.mount.root_dentry()) {
             return self.dentry.name();
         }
 
@@ -144,7 +144,7 @@ impl Path {
     /// If it is the root of a mount, it will go up to the mountpoint
     /// to get the parent of the mountpoint recursively.
     fn effective_parent(&self) -> Option<Self> {
-        if !self.dentry.is_mount_root() && !Arc::ptr_eq(&self.dentry ,&self.mount.root_dentry()) {
+        if !self.dentry.is_mount_root() && !Arc::ptr_eq(&self.dentry, &self.mount.root_dentry()) {
             return Some(Self::new(self.mount.clone(), self.dentry.parent().unwrap()));
         }
 

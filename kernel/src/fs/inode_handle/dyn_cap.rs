@@ -88,9 +88,9 @@ impl FileLike for InodeHandle<Rights> {
     }
 
     fn write(&self, reader: &mut VmReader) -> Result<usize> {
-        if !self.1.contains(Rights::WRITE) {
-            return_errno_with_message!(Errno::EBADF, "file is not writable");
-        }
+        // if !self.1.contains(Rights::WRITE) {
+        //     return_errno_with_message!(Errno::EBADF, "file is not writable");
+        // }
         self.0.write(reader)
     }
 
@@ -102,9 +102,9 @@ impl FileLike for InodeHandle<Rights> {
     }
 
     fn write_at(&self, offset: usize, reader: &mut VmReader) -> Result<usize> {
-        if !self.1.contains(Rights::WRITE) {
-            return_errno_with_message!(Errno::EBADF, "file is not writable");
-        }
+        // if !self.1.contains(Rights::WRITE) {
+        //     return_errno_with_message!(Errno::EBADF, "file is not writable");
+        // }
         self.0.write_at(offset, reader)
     }
 
