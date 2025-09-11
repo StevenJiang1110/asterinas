@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
+mod full;
 mod null;
 mod pty;
 mod random;
@@ -48,6 +49,9 @@ pub fn init_in_first_process(ctx: &Context) -> Result<()> {
 
     let console = tty::system_console().clone();
     add_node(console, "console", &fs_resolver)?;
+
+    let full = Arc::new(full::Full);
+    add_node(full, "full", &fs_resolver)?;
 
     for (index, tty) in tty::iter_n_tty().enumerate() {
         add_node(tty.clone(), &format!("tty{}", index), &fs_resolver)?;
