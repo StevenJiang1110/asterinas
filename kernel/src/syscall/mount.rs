@@ -28,10 +28,10 @@ pub fn sys_mount(
     let devname = user_space.read_cstring(devname_addr, MAX_FILENAME_LEN)?;
     let dirname = user_space.read_cstring(dirname_addr, MAX_FILENAME_LEN)?;
     let mount_flags = MountFlags::from_bits_truncate(flags as u32);
-    println!(
-        "devname = {:?}, dirname = {:?}, fstype = 0x{:x}, flags = {:?}, data = 0x{:x}",
-        devname, dirname, fstype_addr, mount_flags, data,
-    );
+    // println!(
+    //     "devname = {:?}, dirname = {:?}, fstype = 0x{:x}, flags = {:?}, data = 0x{:x}",
+    //     devname, dirname, fstype_addr, mount_flags, data,
+    // );
 
     let dst_path = {
         let dirname = dirname.to_string_lossy();
@@ -46,11 +46,11 @@ pub fn sys_mount(
             .lookup(&fs_path)?
     };
 
-    println!(
-        "mount flags = {:?}, dst_path = {:?}",
-        mount_flags,
-        dst_path.abs_path()
-    );
+    // println!(
+    //     "mount flags = {:?}, dst_path = {:?}",
+    //     mount_flags,
+    //     dst_path.abs_path()
+    // );
 
     if mount_flags.contains(MountFlags::MS_REMOUNT) && mount_flags.contains(MountFlags::MS_BIND) {
         do_reconfigure_mnt()?;

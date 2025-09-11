@@ -119,11 +119,11 @@ impl Connected {
         // `reader.len()` is an `Acquire` operation. So it can guarantee that the `has_aux`
         // check below sees the up-to-date value.
         let no_aux_len = reader.len();
-        println!(
-            "reader addr = 0x{:x}, no aux len = {}",
-            reader.addr(),
-            no_aux_len
-        );
+        // println!(
+        //     "reader addr = 0x{:x}, no aux len = {}",
+        //     reader.addr(),
+        //     no_aux_len
+        // );
 
         let peer_end = self.inner.peer_end();
         let is_pass_cred = self.inner.this_end().is_pass_cred.load(Ordering::Relaxed);
@@ -135,6 +135,9 @@ impl Connected {
                 .read_with(move || reader.read_fallible_with_max_len(writer, no_aux_len))?;
 
             if read_len == 0 {
+                if self.inner.is_peer_shutdown() {
+                    return Ok((0, Vec::new()));
+                } 
                 return_errno_with_message!(Errno::EAGAIN, "there's nothing to receive");
             }
             let ctrl_msgs = if is_pass_cred {

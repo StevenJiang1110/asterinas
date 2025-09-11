@@ -32,11 +32,11 @@ pub fn sys_openat(
     }
 
     if path == CString::new("/proc/self/exe").unwrap() {
-        println!("open /proc/self/exe");
+        // println!("open /proc/self/exe");
 
         let executable = ctx.process.executable.lock();
         if let Some(file) = executable.as_ref() {
-            println!("open executable of current processs");
+            // println!("open executable of current processs");
             let filelike = file.clone();
             let fd = insert_file_like(ctx, filelike, flags);
             return Ok(SyscallReturn::Return(fd as _));
@@ -48,7 +48,7 @@ pub fn sys_openat(
         let fd = path_str.replace("/proc/self/fd/", "");
         let fd = fd.parse::<FileDesc>().unwrap();
         assert_eq!(format!("/proc/self/fd/{}", fd).as_str(), path_str);
-        println!("open: {}", path_str);
+        // println!("open: {}", path_str);
 
         let filelike = {
             let file_table = ctx.thread_local.borrow_file_table();
@@ -57,7 +57,7 @@ pub fn sys_openat(
         };
 
         let new_fd = insert_file_like(ctx, filelike, flags);
-        println!("open {}, new_fd = {}", path_str, new_fd);
+        // println!("open {}, new_fd = {}", path_str, new_fd);
         return Ok(SyscallReturn::Return(new_fd as _));
     }
 
