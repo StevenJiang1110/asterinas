@@ -19,7 +19,11 @@ use super::{
 use crate::{
     fs::{cgroupfs::CgroupNode, file_handle::FileLike},
     prelude::*,
-    process::{signal::{constants::SIGCHLD, Pollee}, status::StopWaitStatus, WaitOptions},
+    process::{
+        signal::{constants::SIGCHLD, Pollee},
+        status::StopWaitStatus,
+        WaitOptions,
+    },
     sched::{AtomicNice, Nice},
     thread::{AsThread, Thread},
     time::clocks::ProfClock,
@@ -642,7 +646,7 @@ impl Process {
 
         // Drop the signal if it's ignored. See explanation at `enqueue_signal_locked`.
         let signum = signal.num();
-        if sig_dispositions.get(signum).will_ignore(signum){
+        if sig_dispositions.get(signum).will_ignore(signum) {
             return;
         }
 

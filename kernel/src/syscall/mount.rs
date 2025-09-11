@@ -109,10 +109,6 @@ fn do_bind_mount(src_name: CString, dst_path: Path, recursive: bool, ctx: &Conte
         println!("src_path: {}", mount_point.name());
     }
 
-    if src_path.type_() != InodeType::Dir {
-        return_errno_with_message!(Errno::ENOTDIR, "src_name must be directory");
-    };
-
     src_path.bind_mount_to(&dst_path, recursive, ctx)?;
     Ok(())
 }

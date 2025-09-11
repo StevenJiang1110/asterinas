@@ -137,7 +137,7 @@ impl Connected {
             if read_len == 0 {
                 if self.inner.is_peer_shutdown() {
                     return Ok((0, Vec::new()));
-                } 
+                }
                 return_errno_with_message!(Errno::EAGAIN, "there's nothing to receive");
             }
             let ctrl_msgs = if is_pass_cred {

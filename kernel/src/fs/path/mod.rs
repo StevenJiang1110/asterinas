@@ -278,6 +278,18 @@ impl Path {
             );
         }
 
+        let can_bind = {
+            let src_is_dir = self.type_() == InodeType::Dir;
+            let dst_is_dir = dst_path.type_() == InodeType::Dir;
+            (src_is_dir && dst_is_dir) || (!src_is_dir && !dst_is_dir)
+        };
+        if !can_bind {
+            return_errno_with_message!(
+                Errno::ENOTDIR,
+                "the source and destination must both be directories or both be non-directories"
+            );
+        }
+
         let new_mount = self.mount.clone_mount_tree(&self.dentry, None, recursive);
         new_mount.graft_mount_tree(dst_path)?;
         Ok(())

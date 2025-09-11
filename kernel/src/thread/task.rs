@@ -103,7 +103,7 @@ pub fn create_new_user_task(
             if current_thread.is_exited() {
                 break;
             }
-            
+
             // Handle force execve exit
             if ctx.posix_thread.force_execve_exit.load(Ordering::Acquire) {
                 do_exit(TermStatus::Exited(0));

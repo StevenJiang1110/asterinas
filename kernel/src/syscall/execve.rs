@@ -20,7 +20,11 @@ use crate::{
     },
     prelude::*,
     process::{
-        check_executable_file, posix_thread::{AsPosixThread, ThreadName}, renew_vm_and_map, signal::{constants::SIGKILL, signals::kernel::KernelSignal}, Credentials, Process, ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS
+        check_executable_file,
+        posix_thread::{AsPosixThread, ThreadName},
+        renew_vm_and_map,
+        signal::{constants::SIGKILL, signals::kernel::KernelSignal},
+        Credentials, Process, ProgramToLoad, MAX_LEN_STRING_ARG, MAX_NR_STRING_ARGS,
     },
     thread::AsThread,
     vm::memfd::MemfdFile,
