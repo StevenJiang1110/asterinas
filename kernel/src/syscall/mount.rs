@@ -46,11 +46,11 @@ pub fn sys_mount(
             .lookup(&fs_path)?
     };
 
-    // println!(
-    //     "mount flags = {:?}, dst_path = {:?}",
-    //     mount_flags,
-    //     dst_path.abs_path()
-    // );
+    println!(
+        "mount flags = {:?}, dst_path = {:?}",
+        mount_flags,
+        dst_path.abs_path()
+    );
 
     if mount_flags.contains(MountFlags::MS_REMOUNT) && mount_flags.contains(MountFlags::MS_BIND) {
         do_reconfigure_mnt()?;
@@ -79,11 +79,15 @@ pub fn sys_mount(
 }
 
 fn do_reconfigure_mnt() -> Result<()> {
-    return_errno_with_message!(Errno::EINVAL, "do_reconfigure_mnt is not supported");
+    // return_errno_with_message!(Errno::EINVAL, "do_reconfigure_mnt is not supported");
+    println!("don reconfigure mount");
+    Ok(())
 }
 
 fn do_remount() -> Result<()> {
-    return_errno_with_message!(Errno::EINVAL, "do_remount is not supported");
+    // return_errno_with_message!(Errno::EINVAL, "do_remount is not supported");
+    println!("do remount");
+    Ok(())
 }
 
 /// Bind a mount to a dst location.

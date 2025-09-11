@@ -262,6 +262,8 @@ impl Path {
     /// Returns `EINVAL` if either source or destination path is not in the
     /// current mount namespace.
     pub fn bind_mount_to(&self, dst_path: &Self, recursive: bool, ctx: &Context) -> Result<()> {
+        println!("bind mount to: {}", recursive);
+
         let current_ns_context = ctx.thread_local.borrow_ns_context();
         let current_mnt_ns = current_ns_context.unwrap().mnt_ns();
         if !current_mnt_ns.owns(&self.mount) {
@@ -283,6 +285,8 @@ impl Path {
             let dst_is_dir = dst_path.type_() == InodeType::Dir;
             (src_is_dir && dst_is_dir) || (!src_is_dir && !dst_is_dir)
         };
+
+        println!("can bind: {}", can_bind);
         if !can_bind {
             return_errno_with_message!(
                 Errno::ENOTDIR,
