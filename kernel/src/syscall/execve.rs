@@ -71,6 +71,8 @@ fn lookup_executable_file(
     flags: OpenFlags,
     ctx: &Context,
 ) -> Result<Path> {
+    *ctx.process.executable.lock() = None;
+
     let path = if flags.contains(OpenFlags::AT_EMPTY_PATH) && filename.is_empty() {
         println!("execveat empty path, fd = {}", dfd);
         let mut file_table = ctx.thread_local.borrow_file_table_mut();
@@ -128,7 +130,13 @@ fn do_execve(
         ..
     } = ctx;
 
-    let executable_path = elf_file.abs_path();
+    let executable_path = if let Some(executable) = process.executable.lock().as_ref() {
+        let memfd_file: Arc<MemfdFile> = Arc::downcast(executable.clone()).unwrap();
+        memfd_file.name().to_string()
+    } else {
+        elf_file.abs_path()
+    };
+
     // FIXME: A malicious user could cause a kernel panic by exhausting available memory.
     // Currently, the implementation reads up to `MAX_NR_STRING_ARGS` arguments, each up to
     // `MAX_LEN_STRING_ARG` in length, without first verifying the total combined size.

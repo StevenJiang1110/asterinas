@@ -31,7 +31,6 @@ pub const MAX_MEMFD_NAME_LEN: usize = 249;
 
 pub struct MemfdFile {
     pub inode: Arc<dyn Inode>,
-    #[expect(dead_code)]
     name: String,
     offset: Mutex<usize>,
     access_mode: AccessMode,
@@ -65,6 +64,10 @@ impl MemfdFile {
             access_mode: AccessMode::O_RDWR,
             status_flags: AtomicU32::new(0),
         })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 

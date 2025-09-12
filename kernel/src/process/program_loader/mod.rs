@@ -15,6 +15,8 @@ use crate::{
         utils::{InodeType, Permission},
     },
     prelude::*,
+    process::Process,
+    vm::memfd::MemfdFile,
 };
 
 /// Represents an executable file that is ready to be loaded into memory and executed.
@@ -88,7 +90,17 @@ impl ProgramToLoad {
         process_vm: &ProcessVm,
         fs_resolver: &FsResolver,
     ) -> Result<(String, ElfLoadInfo)> {
-        let abs_path = self.elf_file.abs_path();
+        let abs_path = if let Some(process) = Process::current() {
+            if let Some(executable) = process.executable.lock().as_ref() {
+                let memfd_file: Arc<MemfdFile> = Arc::downcast(executable.clone()).unwrap();
+                memfd_file.name().to_string()
+            } else {
+                self.elf_file.abs_path()
+            }
+        } else {
+            self.elf_file.abs_path()
+        };
+
         let elf_headers = ElfHeaders::parse_elf(&*self.file_first_page)?;
         let elf_load_info = load_elf_to_vm(
             process_vm,

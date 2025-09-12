@@ -124,7 +124,7 @@ impl Path {
     /// If it is the root of a mount, it will go up to the mountpoint
     /// to get the name of the mountpoint recursively.
     fn effective_name(&self) -> String {
-        if !self.dentry.is_mount_root() && !Arc::ptr_eq(&self.dentry, &self.mount.root_dentry()) {
+        if !self.is_mount_root() {
             return self.dentry.name();
         }
 
@@ -144,7 +144,7 @@ impl Path {
     /// If it is the root of a mount, it will go up to the mountpoint
     /// to get the parent of the mountpoint recursively.
     fn effective_parent(&self) -> Option<Self> {
-        if !self.dentry.is_mount_root() && !Arc::ptr_eq(&self.dentry, &self.mount.root_dentry()) {
+        if !self.is_mount_root() {
             return Some(Self::new(self.mount.clone(), self.dentry.parent().unwrap()));
         }
 
@@ -230,7 +230,7 @@ impl Path {
     /// - The mount of the current path is the root mount.
     /// - The current path is not in the current mount namespace.
     pub fn unmount(&self, ctx: &Context) -> Result<Arc<Mount>> {
-        if !self.dentry.is_mount_root() {
+        if !self.is_mount_root() {
             return_errno_with_message!(Errno::EINVAL, "not mounted");
         }
 
@@ -309,12 +309,16 @@ impl Path {
     /// - The mount of the current path is the root mount.
     /// - Either source or destination path is not in the current mount namespace
     pub fn move_mount_to(&self, dst_path: &Self, ctx: &Context) -> Result<()> {
+        println!("move mount to {}", dst_path.abs_path());
         if !self.is_mount_root() {
             return_errno_with_message!(Errno::EINVAL, "The current path is not a mount root");
         };
+        println!("is mount root");
         if self.mount_node().parent().is_none() {
             return_errno_with_message!(Errno::EINVAL, "The root mount can not be moved");
         }
+
+        println!("parent is not none");
 
         let current_ns_context = ctx.thread_local.borrow_ns_context();
         let current_mnt_ns = current_ns_context.unwrap().mnt_ns();
@@ -331,6 +335,8 @@ impl Path {
                 "the destination path is not in this mount namespace"
             );
         }
+
+        println!("mount namespace check fails");
 
         self.mount.graft_mount_tree(dst_path)
     }
@@ -357,6 +363,11 @@ impl Path {
         }
 
         self.dentry.rename(old_name, &new_dir.dentry, new_name)
+    }
+
+    /// Returns true if the current `Path` is the root of its mount.
+    pub(super) fn is_mount_root(&self) -> bool {
+        Arc::ptr_eq(&self.dentry, self.mount.root_dentry())
     }
 }
 
@@ -385,7 +396,6 @@ impl Path {
     pub fn set_ctime(&self, time: Duration);
     pub fn key(&self) -> DentryKey;
     pub fn inode(&self) -> &Arc<dyn Inode>;
-    pub fn is_mount_root(&self) -> bool;
     pub fn is_mountpoint(&self) -> bool;
     pub fn set_xattr(
         &self,
