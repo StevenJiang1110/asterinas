@@ -205,6 +205,10 @@ impl PosixThread {
         *signalled_waker = Some(waker);
     }
 
+    pub fn is_paused(&self) -> bool {
+        self.signalled_waker.lock().is_some()
+    }
+
     /// Clears the signalled waker of this thread.
     pub fn clear_signalled_waker(&self) {
         *self.signalled_waker.lock() = None;

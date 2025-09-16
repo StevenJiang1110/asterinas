@@ -46,11 +46,11 @@ pub fn sys_mount(
             .lookup(&fs_path)?
     };
 
-    println!(
-        "mount flags = {:?}, dst_path = {:?}",
-        mount_flags,
-        dst_path.abs_path()
-    );
+    // println!(
+    //     "mount flags = {:?}, dst_path = {:?}",
+    //     mount_flags,
+    //     dst_path.abs_path()
+    // );
 
     if mount_flags.contains(MountFlags::MS_REMOUNT) && mount_flags.contains(MountFlags::MS_BIND) {
         do_reconfigure_mnt()?;
@@ -108,10 +108,10 @@ fn do_bind_mount(src_name: CString, dst_path: Path, recursive: bool, ctx: &Conte
             .lookup(&fs_path)?
     };
 
-    let mount_point = src_path.mount.mountpoint.read();
-    if let Some(mount_point) = mount_point.as_ref() {
-        println!("src_path: {}", mount_point.name());
-    }
+    // let mount_point = src_path.mount.mountpoint.read();
+    // if let Some(mount_point) = mount_point.as_ref() {
+    //     println!("src_path: {}", mount_point.name());
+    // }
 
     src_path.bind_mount_to(&dst_path, recursive, ctx)?;
     Ok(())

@@ -130,6 +130,7 @@ impl Pause for Waiter {
         };
 
         posix_thread.set_signalled_waker(self.waker());
+        
         let res = self.wait_until_or_timeout_cancelled(cond, cancel_cond, timeout);
         posix_thread.clear_signalled_waker();
 

@@ -118,7 +118,15 @@ impl FileOps for StatFileOps {
             .as_ref()
             .and_then(|name| name.as_string())
             .unwrap_or_else(|| process.executable_path());
-        let state = if thread.is_exited() { 'Z' } else { 'R' };
+        let state = if process.status().is_zombie() {
+            'Z'
+        } else if process.is_stopped() {
+            'T'
+        } else if posix_thread.is_paused() {
+            'S'
+        } else {
+            'R'
+        };
         let ppid = process.parent().pid();
         let pgrp = process.pgid();
         let session = process.sid();
@@ -202,6 +210,9 @@ impl FileOps for StatFileOps {
             rss
         )
         .unwrap();
+
+        println!("{}", stat_output);
+
         Ok(stat_output.into_bytes())
     }
 }
