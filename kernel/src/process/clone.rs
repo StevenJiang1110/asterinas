@@ -404,6 +404,17 @@ fn clone_child_process(
         posix_thread,
     )?;
 
+    // Clone parent
+    let parent_of_child = if clone_flags.contains(CloneFlags::CLONE_PARENT) {
+        if let Some(parent) = process.parent.lock().process().upgrade() {
+            parent
+        } else {
+            unreachable!()
+        }
+    } else {
+        posix_thread.process()
+    };
+
     if clone_flags.contains(CloneFlags::CLONE_NEWNS) {
         child_fs
             .resolver()
@@ -451,7 +462,7 @@ fn clone_child_process(
 
         create_child_process(
             child_tid,
-            posix_thread.weak_process(),
+            Arc::downgrade(&parent_of_child),
             &child_elf_path,
             child_process_vm,
             child_resource_limits,
@@ -468,12 +479,12 @@ fn clone_child_process(
     };
 
     // Sets parent process and group for child process.
-    set_parent_and_group(process, &child);
+    set_parent_and_group(&parent_of_child, &child);
 
     // Updates `has_child_subreaper` for the child process after inserting
     // it to its parent's children to make sure the `has_child_subreaper`
     // state of the child process will be consistent with its parent.
-    if process.has_child_subreaper.load(Ordering::Relaxed) {
+    if parent_of_child.has_child_subreaper.load(Ordering::Relaxed) {
         child.has_child_subreaper.store(true, Ordering::Relaxed);
     }
 

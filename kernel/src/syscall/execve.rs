@@ -144,9 +144,13 @@ fn do_execve(
     // of all strings to enforce a sensible overall limit.
     let argv = read_cstring_vec(argv_ptr_ptr, MAX_NR_STRING_ARGS, MAX_LEN_STRING_ARG, ctx)?;
     let envp = read_cstring_vec(envp_ptr_ptr, MAX_NR_STRING_ARGS, MAX_LEN_STRING_ARG, ctx)?;
-    debug!(
-        "filename: {:?}, argv = {:?}, envp = {:?}",
-        executable_path, argv, envp
+    println!(
+        "[pid={}, tid ={}]execve: filename: {:?}, argv = {:?}, envp = {:?}",
+        ctx.process.pid(),
+        ctx.posix_thread.tid(),
+        executable_path,
+        argv,
+        envp
     );
     // FIXME: should we set thread name in execve?
     *posix_thread.thread_name().lock() =

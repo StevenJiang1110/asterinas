@@ -4,4 +4,4 @@ set -e
 
 IMAGE_NAME=hello:latest
 
-podman run ${IMAGE_NAME}
+podman run --log-level=debug ${IMAGE_NAME}

@@ -336,8 +336,6 @@ impl Path {
             );
         }
 
-        println!("mount namespace check fails");
-
         self.mount.graft_mount_tree(dst_path)
     }
 
