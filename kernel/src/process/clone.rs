@@ -233,6 +233,9 @@ pub fn clone_child(
             current.children_wait_queue().wait_until(cond);
         }
 
+        ctx.process.status().clear_vfork_counter();
+        ctx.process.status().vfork_wait_queue().wake_all();
+
         let child_pid = child_process.pid();
         Ok(child_pid)
     }

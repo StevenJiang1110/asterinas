@@ -2,9 +2,9 @@
 
 //! The process status.
 
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
-use ostd::sync::SpinLock;
+use ostd::sync::{SpinLock, WaitQueue};
 
 use super::ExitCode;
 use crate::process::{signal::sig_num::SigNum, WaitOptions};
@@ -17,12 +17,13 @@ use crate::process::{signal::sig_num::SigNum, WaitOptions};
 ///    with its parent process;
 /// 3. The exit code of the process;
 /// 4. Whether the process is stopped (by a signal or ptrace).
-#[derive(Debug)]
 pub struct ProcessStatus {
     is_zombie: AtomicBool,
     is_vfork_child: AtomicBool,
     exit_code: AtomicU32,
     stop_status: StopStatus,
+    vfork_wait_counter: AtomicUsize,
+    vfork_wait_queue: WaitQueue,
 }
 
 impl Default for ProcessStatus {
@@ -32,6 +33,8 @@ impl Default for ProcessStatus {
             is_vfork_child: AtomicBool::new(false),
             exit_code: AtomicU32::new(0),
             stop_status: StopStatus::new(),
+            vfork_wait_counter: AtomicUsize::new(0),
+            vfork_wait_queue: WaitQueue::new(),
         }
     }
 }
@@ -63,6 +66,26 @@ impl ProcessStatus {
     /// Sets whether the process is the vfork child.
     pub fn set_vfork_child(&self, is_vfork_child: bool) {
         self.is_vfork_child.store(is_vfork_child, Ordering::Release);
+    }
+
+    pub fn is_vfork_parent(&self) -> bool {
+        self.vfork_wait_counter.load(Ordering::Acquire) > 0
+    }
+
+    pub fn vfork_wait_counter(&self) -> usize {
+        self.vfork_wait_counter.load(Ordering::Acquire)
+    }
+
+    pub fn increase_vfork_wait_counter(&self) {
+        self.vfork_wait_counter.fetch_add(1, Ordering::Acquire);
+    }
+
+    pub fn clear_vfork_counter(&self) {
+        self.vfork_wait_counter.store(0, Ordering::Release);
+    }
+
+    pub fn vfork_wait_queue(&self) -> &WaitQueue {
+        &self.vfork_wait_queue
     }
 }
 

@@ -111,6 +111,14 @@ pub fn create_new_user_task(
                 handle_pending_signal(user_ctx, &ctx, syscall_number);
             }
 
+            if ctx.process.status().is_vfork_parent() {
+                ctx.process.status().increase_vfork_wait_counter();
+                ctx.process
+                    .status()
+                    .vfork_wait_queue()
+                    .wait_until(|| (!ctx.process.status().is_vfork_parent()).then_some(()))
+            }
+
             // Handle signals while the thread is stopped
             // FIXME: Currently, we handle all signals when the process is stopped.
             // However, when the process is stopped, at least signals with user-provided handlers

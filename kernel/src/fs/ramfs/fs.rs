@@ -767,6 +767,14 @@ impl Inode for RamInode {
         self.inner.as_device().cloned()
     }
 
+    fn as_fifo(&self) -> Option<&NamedPipe> {
+        if !self.typ.is_fifo() {
+            return None;
+        }
+
+        self.inner.as_named_pipe()
+    }
+
     fn create(&self, name: &str, type_: InodeType, mode: InodeMode) -> Result<Arc<dyn Inode>> {
         if name.len() > NAME_MAX {
             return_errno!(Errno::ENAMETOOLONG);

@@ -7,8 +7,8 @@ use crate::{
     fs::{
         file_handle::FileLike,
         file_table::{FdFlags, FileDesc},
-        fs_resolver::{FsPath, AT_FDCWD},
-        utils::{AccessMode, CreationFlags},
+        fs_resolver::{FsPath, OpenArgs, AT_FDCWD},
+        utils::{AccessMode, CreationFlags, StatusFlags},
     },
     prelude::*,
     syscall::constants::MAX_FILENAME_LEN,
@@ -31,6 +31,8 @@ pub fn sys_openat(
         return_errno_with_message!(Errno::ENOENT, "openat fails with empty path");
     }
 
+    let open_args = OpenArgs::from_flags_and_mode(flags, mode)?;
+
     if path == CString::new("/proc/self/exe").unwrap() {
         // println!("open /proc/self/exe");
 
@@ -38,7 +40,7 @@ pub fn sys_openat(
         if let Some(file) = executable.as_ref() {
             // println!("open executable of current processs");
             let filelike = file.clone();
-            let fd = insert_file_like(ctx, filelike, flags);
+            let fd = insert_file_like(ctx, filelike, flags, open_args);
             return Ok(SyscallReturn::Return(fd as _));
         }
     }
@@ -56,7 +58,7 @@ pub fn sys_openat(
             file_table_locked.get_file(fd)?.clone()
         };
 
-        let new_fd = insert_file_like(ctx, filelike, flags);
+        let new_fd = insert_file_like(ctx, filelike, flags, open_args);
         // println!("open {}, new_fd = {}", path_str, new_fd);
         return Ok(SyscallReturn::Return(new_fd as _));
     }
@@ -77,12 +79,43 @@ pub fn sys_openat(
         Arc::new(inode_handle)
     };
 
-    let fd = insert_file_like(ctx, file_handle, flags);
+    let fd = insert_file_like(ctx, file_handle, flags, open_args);
 
     Ok(SyscallReturn::Return(fd as _))
 }
 
-fn insert_file_like(ctx: &Context, filelike: Arc<dyn FileLike>, flags: u32) -> FileDesc {
+fn open_named_pipe(filelike: &Arc<dyn FileLike>, open_args: OpenArgs) {
+    let Ok(inode_handle) = filelike.as_inode_or_err() else {
+        return;
+    };
+
+    let Some(inode) = inode_handle.inode() else {
+        return;
+    };
+
+    let Some(named_pipe) = inode.as_fifo() else {
+        return;
+    };
+
+    let abs_path = inode_handle.path().abs_path();
+    println!(
+        "open named pipe: {}, access_mode = {:?}, status_flags = {:?}",
+        abs_path, open_args.access_mode, open_args.status_flags
+    );
+
+    named_pipe.open(open_args);
+
+    println!("open named pipe successfully");
+}
+
+fn insert_file_like(
+    ctx: &Context,
+    filelike: Arc<dyn FileLike>,
+    flags: u32,
+    open_args: OpenArgs,
+) -> FileDesc {
+    open_named_pipe(&filelike, open_args);
+
     let file_table = ctx.thread_local.borrow_file_table();
     let mut file_table_locked = file_table.unwrap().write();
     let fd_flags = if CreationFlags::from_bits_truncate(flags).contains(CreationFlags::O_CLOEXEC) {

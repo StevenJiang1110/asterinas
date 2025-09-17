@@ -15,7 +15,10 @@ use super::{
 };
 use crate::{
     events::IoEvents,
-    fs::device::{Device, DeviceType},
+    fs::{
+        device::{Device, DeviceType},
+        named_pipe::NamedPipe,
+    },
     prelude::*,
     process::{posix_thread::AsPosixThread, signal::PollHandle, Gid, Uid},
     time::clocks::RealTimeCoarseClock,
@@ -60,6 +63,10 @@ impl InodeType {
 
     pub fn is_device(&self) -> bool {
         *self == InodeType::BlockDevice || *self == InodeType::CharDevice
+    }
+
+    pub fn is_fifo(&self) -> bool {
+        *self == InodeType::NamedPipe
     }
 
     /// Parse the inode type in the `mode` from syscall, and convert it into `InodeType`.
@@ -415,6 +422,10 @@ pub trait Inode: Any + Sync + Send {
 
     fn mknod(&self, name: &str, mode: InodeMode, type_: MknodType) -> Result<Arc<dyn Inode>> {
         Err(Error::new(Errno::ENOTDIR))
+    }
+
+    fn as_fifo(&self) -> Option<&NamedPipe> {
+        None
     }
 
     fn as_device(&self) -> Option<Arc<dyn Device>> {
