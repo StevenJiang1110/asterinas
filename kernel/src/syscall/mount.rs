@@ -80,13 +80,13 @@ pub fn sys_mount(
 
 fn do_reconfigure_mnt() -> Result<()> {
     // return_errno_with_message!(Errno::EINVAL, "do_reconfigure_mnt is not supported");
-    println!("don reconfigure mount");
+    // println!("don reconfigure mount");
     Ok(())
 }
 
 fn do_remount() -> Result<()> {
     // return_errno_with_message!(Errno::EINVAL, "do_remount is not supported");
-    println!("do remount");
+    // println!("do remount");
     Ok(())
 }
 

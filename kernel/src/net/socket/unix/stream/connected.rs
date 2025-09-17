@@ -44,11 +44,11 @@ impl Connected {
         let (this_writer, peer_reader) = RingBuffer::new(UNIX_STREAM_DEFAULT_BUF_SIZE).split();
         let (peer_writer, this_reader) = RingBuffer::new(UNIX_STREAM_DEFAULT_BUF_SIZE).split();
 
-        println!(
-            "socket pair, buffer1 addr = 0x{:x}, buffer2 addr = 0x{:x}",
-            this_writer.addr(),
-            peer_writer.addr()
-        );
+        // println!(
+        //     "socket pair, buffer1 addr = 0x{:x}, buffer2 addr = 0x{:x}",
+        //     this_writer.addr(),
+        //     peer_writer.addr()
+        // );
 
         let this_inner = Inner {
             addr: Once::new(),
@@ -159,7 +159,7 @@ impl Connected {
             } else {
                 Vec::new()
             };
-            println!("recvmsg returns {}", read_len);
+            // println!("recvmsg returns {}", read_len);
             return Ok((read_len, ctrl_msgs));
         }
 
@@ -272,7 +272,7 @@ impl Connected {
                     return Ok(0);
                 }
                 let res = writer.write_fallible(reader)?;
-                println!("write to: addr = 0x{:x}, len = {}", writer.addr(), res);
+                // println!("write to: addr = 0x{:x}, len = {}", writer.addr(), res);
                 Ok(res)
             });
         }

@@ -233,7 +233,7 @@ impl InodeMeta {
     }
 
     pub fn resize(&mut self, new_size: usize) {
-        println!(
+        debug!(
             "resize inde: old size = 0x{:x}, new_size = 0x{:x}",
             self.size, new_size
         );

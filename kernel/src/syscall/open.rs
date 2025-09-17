@@ -98,14 +98,14 @@ fn open_named_pipe(filelike: &Arc<dyn FileLike>, open_args: OpenArgs) {
     };
 
     let abs_path = inode_handle.path().abs_path();
-    println!(
+    debug!(
         "open named pipe: {}, access_mode = {:?}, status_flags = {:?}",
         abs_path, open_args.access_mode, open_args.status_flags
     );
 
     named_pipe.open(open_args);
 
-    println!("open named pipe successfully");
+    debug!("open named pipe successfully");
 }
 
 fn insert_file_like(

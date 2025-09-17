@@ -67,7 +67,7 @@ impl NamedPipe {
             if is_nonblocking {
                 // self.reader.set_status_flags(StatusFlags::O_NONBLOCK).unwrap();
                 return;
-            } 
+            }
             // else {
             //     self.reader.set_status_flags(StatusFlags::empty()).unwrap()
             // }
@@ -116,7 +116,7 @@ impl FileLike for NamedPipe {
     }
 
     fn write(&self, reader: &mut VmReader) -> Result<usize> {
-        println!("write to named pipe: {}", reader.remain());
+        // println!("write to named pipe: {}", reader.remain());
         self.writer.write(reader)
     }
 

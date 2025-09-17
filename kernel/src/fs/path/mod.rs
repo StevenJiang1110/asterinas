@@ -309,16 +309,16 @@ impl Path {
     /// - The mount of the current path is the root mount.
     /// - Either source or destination path is not in the current mount namespace
     pub fn move_mount_to(&self, dst_path: &Self, ctx: &Context) -> Result<()> {
-        println!("move mount to {}", dst_path.abs_path());
+        // println!("move mount to {}", dst_path.abs_path());
         if !self.is_mount_root() {
             return_errno_with_message!(Errno::EINVAL, "The current path is not a mount root");
         };
-        println!("is mount root");
+        // println!("is mount root");
         if self.mount_node().parent().is_none() {
             return_errno_with_message!(Errno::EINVAL, "The root mount can not be moved");
         }
 
-        println!("parent is not none");
+        // println!("parent is not none");
 
         let current_ns_context = ctx.thread_local.borrow_ns_context();
         let current_mnt_ns = current_ns_context.unwrap().mnt_ns();

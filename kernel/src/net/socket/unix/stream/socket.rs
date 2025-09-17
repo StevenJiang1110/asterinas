@@ -467,18 +467,18 @@ impl Socket for UnixStreamSocket {
             warn!("unsupported flags: {:?}", flags);
         }
 
-        println!("recvmsg, non blocking = {}", self.is_nonblocking());
+        // println!("recvmsg, non blocking = {}", self.is_nonblocking());
 
-        let (received_bytes, control_messages) = match 
-            self.block_on(IoEvents::IN, || self.try_recv(writer, flags)) {
+        let (received_bytes, control_messages) =
+            match self.block_on(IoEvents::IN, || self.try_recv(writer, flags)) {
                 Ok(res) => res,
                 Err(e) => {
-                    println!("Receive error = {:?}", e);
+                    // println!("Receive error = {:?}", e);
                     return Err(e);
                 }
             };
 
-        println!("received_bytes = {}", received_bytes);
+        // println!("received_bytes = {}", received_bytes);
 
         let message_header = MessageHeader::new(None, control_messages);
 
