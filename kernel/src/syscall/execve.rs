@@ -74,7 +74,7 @@ fn lookup_executable_file(
     *ctx.process.executable.lock() = None;
 
     let path = if flags.contains(OpenFlags::AT_EMPTY_PATH) && filename.is_empty() {
-        println!("execveat empty path, fd = {}", dfd);
+        // println!("execveat empty path, fd = {}", dfd);
         let mut file_table = ctx.thread_local.borrow_file_table_mut();
         let mut file_table_locked = file_table.unwrap().write();
         file_table_locked.remove_cloexec_flag(dfd);
@@ -85,7 +85,7 @@ fn lookup_executable_file(
                 let Ok(memfd_file) = Arc::downcast::<MemfdFile>(file.clone()) else {
                     return Err(e);
                 };
-                println!("execveat memfd file, fd = {}", dfd);
+                // println!("execveat memfd file, fd = {}", dfd);
 
                 *ctx.process.executable.lock() = Some(memfd_file.clone() as Arc<dyn FileLike>);
                 let inode = memfd_file.inode.clone();
@@ -144,7 +144,7 @@ fn do_execve(
     // of all strings to enforce a sensible overall limit.
     let argv = read_cstring_vec(argv_ptr_ptr, MAX_NR_STRING_ARGS, MAX_LEN_STRING_ARG, ctx)?;
     let envp = read_cstring_vec(envp_ptr_ptr, MAX_NR_STRING_ARGS, MAX_LEN_STRING_ARG, ctx)?;
-    println!(
+    debug!(
         "[pid={}, tid ={}]execve: filename: {:?}, argv = {:?}, envp = {:?}",
         ctx.process.pid(),
         ctx.posix_thread.tid(),

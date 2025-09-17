@@ -102,7 +102,7 @@ fn open_named_pipe(filelike: &Arc<dyn FileLike>, open_args: OpenArgs) -> Result<
     };
 
     let abs_path = inode_handle.path().abs_path();
-    println!(
+    debug!(
         "open named pipe: {}, access_mode = {:?}, status_flags = {:?}",
         abs_path, open_args.access_mode, open_args.status_flags
     );
@@ -113,10 +113,10 @@ fn open_named_pipe(filelike: &Arc<dyn FileLike>, open_args: OpenArgs) -> Result<
         Some(named_pipe.open(open_args.access_mode, open_args.status_flags)?)
     };
 
-    println!(
-        "open named pipe successfully, access_mode = {:?}",
-        open_args.access_mode
-    );
+    // println!(
+    //     "open named pipe successfully, access_mode = {:?}",
+    //     open_args.access_mode
+    // );
 
     let inode_handle = InodeHandle_ {
         path: inode_handle.path().clone(),

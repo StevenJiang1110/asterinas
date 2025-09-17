@@ -195,11 +195,11 @@ impl super::SubControl for CgroupController {
 
                 if let Some(cgroup_node) = cgroup_node.as_any().downcast_ref::<CgroupNode>() {
                     cgroup_node.move_process(process);
-                    if cgroup_node.freeze.load(Ordering::Relaxed) {
-                        println!("CGROUP: Add process to freezed cgroup");
-                    } else {
-                        println!("CGROUP: Add process to not freezed cgroup");
-                    }
+                    // if cgroup_node.freeze.load(Ordering::Relaxed) {
+                    //     println!("CGROUP: Add process to freezed cgroup");
+                    // } else {
+                    //     println!("CGROUP: Add process to not freezed cgroup");
+                    // }
                 } else {
                     let rcu_old_cgroup = process.cgroup();
                     let old_cgroup = rcu_old_cgroup.get();
@@ -289,11 +289,11 @@ impl super::SubControl for CgroupController {
                 if let Some(cgroup_node) = cgroup_node.as_any().downcast_ref::<CgroupNode>() {
                     match value {
                         0 => {
-                            println!("CGROUP: clear freeze");
+                            // println!("CGROUP: clear freeze");
                             cgroup_node.clear_freeze();
                         }
                         1 => {
-                            println!("CGROUP: set freeze");
+                            // println!("CGROUP: set freeze");
                             cgroup_node.set_freeze();
                         }
                         _ => return Err(Error::InvalidOperation),

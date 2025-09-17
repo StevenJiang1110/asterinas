@@ -211,8 +211,6 @@ impl FileOps for StatFileOps {
         )
         .unwrap();
 
-        println!("{}", stat_output);
-
         Ok(stat_output.into_bytes())
     }
 }

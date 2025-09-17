@@ -34,7 +34,6 @@ impl Pollable for ReadHandle {
 
 impl Drop for ReadHandle {
     fn drop(&mut self) {
-        println!("drop read handle");
         self.inner.0.state.peer_shutdown();
     }
 }
@@ -55,7 +54,6 @@ impl Pollable for WriteHandle {
 
 impl Drop for WriteHandle {
     fn drop(&mut self) {
-        println!("drop write handle");
         self.inner.1.state.shutdown();
     }
 }
