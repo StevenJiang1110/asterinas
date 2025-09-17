@@ -154,17 +154,12 @@ impl Connected {
                 .inner
                 .read_with(move || reader.read_fallible_with_max_len(writer, no_aux_len))?;
 
-            if read_len == 0 {
-                if self.inner.is_peer_shutdown() {
-                    return Ok((0, Vec::new()));
-                }
-                return_errno_with_message!(Errno::EAGAIN, "there's nothing to receive");
-            }
             let ctrl_msgs = if is_pass_cred {
                 AuxiliaryData::default().generate_control(is_pass_cred)
             } else {
                 Vec::new()
             };
+            println!("recvmsg returns {}", read_len);
             return Ok((read_len, ctrl_msgs));
         }
 

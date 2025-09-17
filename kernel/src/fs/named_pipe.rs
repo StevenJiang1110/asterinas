@@ -65,8 +65,12 @@ impl NamedPipe {
             }
 
             if is_nonblocking {
+                // self.reader.set_status_flags(StatusFlags::O_NONBLOCK).unwrap();
                 return;
-            }
+            } 
+            // else {
+            //     self.reader.set_status_flags(StatusFlags::empty()).unwrap()
+            // }
 
             self.open_wait_queue
                 .pause_until(|| self.has_writer.load(Ordering::Acquire).then_some(()))
@@ -105,7 +109,10 @@ impl Pollable for NamedPipe {
 
 impl FileLike for NamedPipe {
     fn read(&self, writer: &mut VmWriter) -> Result<usize> {
-        self.reader.read(writer)
+        println!("read named pipe");
+        let res = self.reader.read(writer);
+        println!("read named pipe returns");
+        res
     }
 
     fn write(&self, reader: &mut VmReader) -> Result<usize> {

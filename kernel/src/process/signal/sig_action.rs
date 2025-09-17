@@ -84,6 +84,10 @@ impl SigAction {
     ///  * the signal action is explicitly set to ignore the signals, or
     ///  * the signal action is default and the default action is to ignore the signals.
     pub fn will_ignore(&self, signum: SigNum) -> bool {
+        if signum == SIGCHLD {
+            return false;
+        }
+
         match self {
             SigAction::Dfl => {
                 let default_action = SigDefaultAction::from_signum(signum);

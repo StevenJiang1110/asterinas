@@ -469,8 +469,14 @@ impl Socket for UnixStreamSocket {
 
         println!("recvmsg, non blocking = {}", self.is_nonblocking());
 
-        let (received_bytes, control_messages) =
-            self.block_on(IoEvents::IN, || self.try_recv(writer, flags))?;
+        let (received_bytes, control_messages) = match 
+            self.block_on(IoEvents::IN, || self.try_recv(writer, flags)) {
+                Ok(res) => res,
+                Err(e) => {
+                    println!("Receive error = {:?}", e);
+                    return Err(e);
+                }
+            };
 
         println!("received_bytes = {}", received_bytes);
 
