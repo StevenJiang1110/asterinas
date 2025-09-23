@@ -138,6 +138,9 @@ impl InodeHandle_ {
     pub fn set_status_flags(&self, new_status_flags: StatusFlags) {
         self.status_flags
             .store(new_status_flags.bits(), Ordering::Relaxed);
+        if let Some(file_io) = &self.file_io {
+            file_io.set_status_flags(new_status_flags);
+        }
     }
 
     pub fn readdir(&self, visitor: &mut dyn DirentVisitor) -> Result<usize> {
@@ -331,13 +334,26 @@ impl<R> Drop for InodeHandle<R> {
     }
 }
 
+/// A trait for file-like objects that provide custom I/O operations.
+///
+/// This trait is typically implemented for special files like devices or
+/// named pipes (FIFOs), which have behaviors different from regular on-disk files.
 pub trait FileIo: Pollable + Send + Sync + 'static {
+    /// Reads data from the file into the given `VmWriter`.
     fn read(&self, writer: &mut VmWriter) -> Result<usize>;
 
+    /// Writes data from the given `VmReader` into the file.
     fn write(&self, reader: &mut VmReader) -> Result<usize>;
 
     fn ioctl(&self, cmd: IoctlCmd, arg: usize) -> Result<i32> {
         return_errno_with_message!(Errno::EINVAL, "ioctl is not supported");
+    }
+
+    /// Sets the file status flags to the given `status_flags`.
+    //
+    // TODO: This method is a workaround for updating status flags for FIFO.
+    fn set_status_flags(&self, status_flags: StatusFlags) {
+        // Default implementation does nothing.
     }
 }
 

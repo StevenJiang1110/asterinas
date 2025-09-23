@@ -20,7 +20,6 @@ use crate::{
     events::IoEvents,
     fs::{
         device::Device,
-        file_handle::FileLike,
         named_pipe::NamedPipe,
         path::{is_dot, is_dot_or_dotdot, is_dotdot},
         registry::{FsProperties, FsType},
@@ -557,23 +556,7 @@ impl Inode for RamInode {
                     // Typically, devices like "/dev/zero" or "/dev/null" do not require modifying
                     // timestamps here. Please adjust this behavior accordingly if there are special devices.
                 }
-                Inner::NamedPipe(named_pipe) => named_pipe.read(writer)?,
-                _ => {
-                    match &self.inner {
-                        Inner::File(..) | Inner::Device(..) | Inner::NamedPipe(..) => todo!(),
-                        Inner::Dir(_) => {
-                            println!("dir entry");
-                        }
-
-                        Inner::SymLink(spin_lock) => {
-                            println!("symlink: {}", spin_lock.lock().as_str());
-                        }
-                        Inner::Socket => {
-                            println!("socket:")
-                        }
-                    }
-                    return_errno_with_message!(Errno::EISDIR, "read is not supported")
-                }
+                _ => return_errno_with_message!(Errno::EISDIR, "read is not supported"),
             }
         };
 
@@ -618,10 +601,6 @@ impl Inode for RamInode {
                 // Typically, devices like "/dev/zero" or "/dev/null" do not require modifying
                 // timestamps here. Please adjust this behavior accordingly if there are special devices.
             }
-            InodeType::NamedPipe => {
-                let named_pipe = self.inner.as_named_pipe().unwrap();
-                named_pipe.write(reader)?
-            }
             _ => return_errno_with_message!(Errno::EISDIR, "write is not supported"),
         };
         Ok(written_len)
@@ -636,8 +615,11 @@ impl Inode for RamInode {
     }
 
     fn resize(&self, new_size: usize) -> Result<()> {
+        if self.typ == InodeType::Dir {
+            return_errno_with_message!(Errno::EISDIR, "the inode is a directory");
+        }
         if self.typ != InodeType::File {
-            return_errno_with_message!(Errno::EISDIR, "not regular file");
+            return_errno_with_message!(Errno::EINVAL, "not regular file");
         }
 
         let file_size = self.size();
@@ -765,6 +747,14 @@ impl Inode for RamInode {
             return None;
         }
         self.inner.as_device().cloned()
+    }
+
+    fn as_named_pipe(&self) -> Option<&NamedPipe> {
+        if self.typ != InodeType::NamedPipe {
+            return None;
+        }
+
+        self.inner.as_named_pipe()
     }
 
     fn create(&self, name: &str, type_: InodeType, mode: InodeMode) -> Result<Arc<dyn Inode>> {
