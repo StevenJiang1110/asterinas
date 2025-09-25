@@ -1,5 +1,5 @@
 { lib, stdenvNoCC, fetchFromGitHub, hostPlatform, writeClosure, busybox, apps
-, benchmark, syscall, callPackage, }:
+, benchmark, syscall, callPackage, pkgs }:
 let
   etc = lib.fileset.toSource {
     root = ./../src/etc;
@@ -17,11 +17,14 @@ let
     name = "gvisor-libs";
     path = "/lib/x86_64-linux-gnu";
   };
-  podman = callPackage podman/package.nix {
-    conmon = callPackage conmon/package.nix { };
-    runc = callPackage runc/package.nix { };
-    crun = callPackage crun/package.nix { };
-  };
+  patched_runc = pkgs.runc.overrideAttrs (oldAttrs: {
+    patches = (oldAttrs.patches or [ ])
+      ++ [ ./podman/0001-Patch-runc-for-Asterinas.patch ];
+  });
+  podman = (pkgs.podman.overrideAttrs (oldAttrs: {
+    patches = (oldAttrs.patches or [ ])
+      ++ [ ./podman/0001-Patch-podman-for-Asterinas.patch ];
+  })).override { runc = patched_runc; };
   all_pkgs = [ busybox etc podman ]
     ++ lib.optionals (apps != null) [ apps.package ]
     ++ lib.optionals (benchmark != null) [ benchmark.package ]
@@ -38,12 +41,16 @@ in stdenvNoCC.mkDerivation {
     ln -sfn usr/lib64 $out/lib64
     cp -r ${busybox}/bin/* $out/bin/
 
-    cp -r ${podman}/bin/* $out/bin
     mkdir -p $out/{lib,libexec,share}
+    cp -r ${podman}/bin/* $out/bin
     cp -r ${podman}/lib/* $out/lib
     cp -r ${podman}/libexec/* $out/libexec
     cp -r ${podman}/share/* $out/share
     mkdir -p $out/var/tmp
+    mkdir -p $out/usr/lib/x86_64-linux-gnu
+    mkdir -p $out/etc
+    mkdir -p $out/nix/store
+    cp -r ${podman} $out/nix/store/
 
     cp -r ${host_etc}/resolv.conf $out/etc
     mkdir -p $out/etc/ssl/certs
@@ -85,9 +92,9 @@ in stdenvNoCC.mkDerivation {
     mkdir -p $out/nix/store
     pkg_path=${lib.strings.concatStringsSep ":" all_pkgs}
     while IFS= read -r dep_path; do
-      # if [[ "$pkg_path" == *"$dep_path"* ]]; then
-      #  continue
-      # fi
+      if [[ "$pkg_path" == *"$dep_path"* ]]; then
+       continue
+      fi
       cp -r $dep_path $out/nix/store/
     done < ${writeClosure all_pkgs}
   '';
