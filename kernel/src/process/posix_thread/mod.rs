@@ -233,14 +233,15 @@ impl PosixThread {
     /// enqueue kernel signals or fault signals.
     pub fn enqueue_signal(&self, signal: Box<dyn Signal>) {
         let process = self.process();
-        let sig_dispositions = process.sig_dispositions().lock();
+
+        let sig_dispositions = process.lock_sig_dispositions();
 
         let signum = signal.num();
         if sig_dispositions.get(signum).will_ignore(signum) {
             return;
         }
 
-        self.enqueue_signal_locked(signal, sig_dispositions);
+        self.enqueue_signal_locked(signal, &sig_dispositions);
     }
 
     /// Enqueues a thread-directed signal with locked dispositions.
@@ -257,7 +258,7 @@ impl PosixThread {
     pub(in crate::process) fn enqueue_signal_locked(
         &self,
         signal: Box<dyn Signal>,
-        _sig_dispositions: MutexGuard<SigDispositions>,
+        _sig_dispositions: &SigDispositions,
     ) {
         self.sig_queues.enqueue(signal);
         self.wake_signalled_waker();
