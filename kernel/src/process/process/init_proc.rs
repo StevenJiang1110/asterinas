@@ -66,14 +66,18 @@ fn create_init_process(
         user_ns,
     );
 
-    let init_task = create_init_task(
-        pid,
-        init_proc.vm(),
-        executable_path,
-        Arc::downgrade(&init_proc),
-        argv,
-        envp,
-    )?;
+    let init_task = {
+        let init_proc_vm = init_proc.vm().lock();
+        create_init_task(
+            pid,
+            &init_proc_vm,
+            executable_path,
+            Arc::downgrade(&init_proc),
+            argv,
+            envp,
+        )?
+    };
+
     init_proc.tasks().lock().insert(init_task).unwrap();
 
     Ok(init_proc)
@@ -116,7 +120,7 @@ fn create_init_task(
         let elf_file = fs.resolver().read().lookup(&fs_path)?;
         let program_to_load =
             ProgramToLoad::build_from_file(elf_file, &fs_resolver, argv, envp, 1)?;
-        process_vm.clear_and_map();
+        process_vm.clear_and_map_heap();
         program_to_load.load_to_vm(process_vm, &fs_resolver)?
     };
 
@@ -126,6 +130,7 @@ fn create_init_task(
     let thread_name = ThreadName::new_from_executable_path(executable_path);
     let thread_builder = PosixThreadBuilder::new(tid, thread_name, Box::new(user_ctx), credentials)
         .process(process)
+        .vmar(process_vm.vmar().unwrap().dup().unwrap())
         .fs(Arc::new(fs))
         .is_init_process();
     Ok(thread_builder.build())

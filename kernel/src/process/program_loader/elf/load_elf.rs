@@ -75,7 +75,7 @@ pub fn load_elf_to_vm(
             // the process cannot return to user space again,
             // so `Vmar::clear` and `do_exit_group` are called here.
             // FIXME: sending a fault signal is an alternative approach.
-            process_vm.lock_root_vmar().unwrap().clear().unwrap();
+            process_vm.vmar().unwrap().clear().unwrap();
 
             // The process will exit and the error code will be ignored.
             Err(err)
@@ -138,8 +138,7 @@ fn init_and_map_vmos(
     parsed_elf: &ElfHeaders,
     elf_file: &Path,
 ) -> Result<(RelocatedRange, Vaddr, AuxVec)> {
-    let process_vmar = process_vm.lock_root_vmar();
-    let root_vmar = process_vmar.unwrap();
+    let root_vmar = process_vm.vmar().unwrap();
 
     // After we clear process vm, if any error happens, we must call exit_group instead of return to user space.
     let ldso_load_info = if let Some((ldso_file, ldso_elf)) = ldso {
@@ -507,8 +506,7 @@ pub fn init_aux_vec(
 fn map_vdso_to_vm(process_vm: &ProcessVm) -> Option<Vaddr> {
     use crate::vdso::{vdso_vmo, VDSO_VMO_LAYOUT};
 
-    let process_vmar = process_vm.lock_root_vmar();
-    let root_vmar = process_vmar.unwrap();
+    let root_vmar = process_vm.vmar().unwrap();
     let vdso_vmo = vdso_vmo()?;
 
     let options = root_vmar

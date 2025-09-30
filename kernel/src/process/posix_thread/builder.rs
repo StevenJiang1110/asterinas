@@ -2,6 +2,7 @@
 
 use core::sync::atomic::AtomicU32;
 
+use aster_rights::Full;
 use ostd::{
     arch::cpu::context::{FpuContext, UserContext},
     cpu::set::CpuSet,
@@ -21,6 +22,7 @@ use crate::{
     sched::{Nice, SchedPolicy},
     thread::{task, Thread, Tid},
     time::{clocks::ProfClock, TimerManager},
+    vm::vmar::Vmar,
 };
 
 /// The builder to build a posix thread
@@ -30,6 +32,7 @@ pub struct PosixThreadBuilder {
     thread_name: ThreadName,
     user_ctx: Box<UserContext>,
     process: Weak<Process>,
+    vmar: Option<Vmar<Full>>,
     credentials: Credentials,
 
     // Optional part
@@ -59,6 +62,7 @@ impl PosixThreadBuilder {
             user_ctx,
             process: Weak::new(),
             credentials,
+            vmar: None,
             set_child_tid: 0,
             clear_child_tid: 0,
             file_table: None,
@@ -75,6 +79,11 @@ impl PosixThreadBuilder {
 
     pub fn process(mut self, process: Weak<Process>) -> Self {
         self.process = process;
+        self
+    }
+
+    pub fn vmar(mut self, vmar: Vmar<Full>) -> Self {
+        self.vmar = Some(vmar);
         self
     }
 
@@ -131,6 +140,7 @@ impl PosixThreadBuilder {
             process,
             credentials,
             thread_name,
+            vmar,
             set_child_tid,
             clear_child_tid,
             file_table,
@@ -153,13 +163,7 @@ impl PosixThreadBuilder {
         let fs =
             fs.unwrap_or_else(|| Arc::new(ThreadFsInfo::new(ns_proxy.mnt_ns().new_fs_resolver())));
 
-        let root_vmar = process
-            .upgrade()
-            .unwrap()
-            .lock_root_vmar()
-            .unwrap()
-            .dup()
-            .unwrap();
+        let root_vmar = vmar.unwrap();
 
         Arc::new_cyclic(|weak_task| {
             let posix_thread = {

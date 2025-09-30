@@ -374,15 +374,18 @@ fn clone_child_task(
             Credentials::new_from(&credentials)
         };
 
-        let mut thread_builder =
+        let mut thread_builder = {
+            let vmar = ctx.thread_local.root_vmar().borrow();
             PosixThreadBuilder::new(child_tid, thread_name, child_user_ctx, credentials)
                 .process(posix_thread.weak_process())
+                .vmar(vmar.as_ref().unwrap().dup().unwrap())
                 .sig_mask(sig_mask)
                 .file_table(child_file_table)
                 .fs(child_fs)
                 .fpu_context(child_fpu_context)
                 .user_ns(child_user_ns)
-                .ns_proxy(child_ns_proxy);
+                .ns_proxy(child_ns_proxy)
+        };
 
         // Deal with SETTID/CLEARTID flags
         clone_parent_settid(child_tid, clone_args.parent_tid, clone_flags)?;
@@ -422,8 +425,8 @@ fn clone_child_process(
 
     // Clone the virtual memory space
     let child_process_vm = {
-        let parent_process_vm = process.vm();
-        clone_vm(parent_process_vm, clone_flags)?
+        let parent_process_vm = process.vm().lock();
+        clone_vm(&parent_process_vm, clone_flags)?
     };
 
     // Clone the user context
@@ -491,6 +494,7 @@ fn clone_child_process(
             };
 
             PosixThreadBuilder::new(child_tid, child_thread_name, child_user_ctx, credentials)
+                .vmar(child_process_vm.vmar().unwrap().dup().unwrap())
                 .sig_mask(child_sig_mask)
                 .file_table(child_file_table)
                 .fs(child_fs)

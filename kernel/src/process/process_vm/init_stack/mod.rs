@@ -23,7 +23,6 @@ use ostd::{
 };
 
 use self::aux_vec::{AuxKey, AuxVec};
-use super::ProcessVmarGuard;
 use crate::{
     prelude::*,
     util::random::getrandom,
@@ -160,7 +159,7 @@ impl InitStack {
     /// Maps the VMO of the init stack and constructs a writer to initialize its content.
     pub(super) fn map_and_write(
         &self,
-        root_vmar: &Vmar<Full>,
+        vmar: &Vmar<Full>,
         argv: Vec<CString>,
         envp: Vec<CString>,
         auxvec: AuxVec,
@@ -175,8 +174,7 @@ impl InitStack {
             let perms = VmPerms::READ | VmPerms::WRITE;
             let map_addr = self.initial_top - self.max_size;
             debug_assert!(map_addr % PAGE_SIZE == 0);
-            root_vmar
-                .new_map(self.max_size, perms)?
+            vmar.new_map(self.max_size, perms)?
                 .offset(map_addr)
                 .vmo(vmo.dup().to_dyn())
         };
@@ -195,7 +193,7 @@ impl InitStack {
 
     /// Constructs a reader to parse the content of an `InitStack`.
     /// The `InitStack` should only be read after initialized
-    pub(super) fn reader<'a>(&self, vmar: ProcessVmarGuard<'a>) -> InitStackReader<'a> {
+    pub(super) fn reader<'a>(&self, vmar: &'a Vmar<Full>) -> InitStackReader<'a> {
         debug_assert!(self.is_initialized());
         InitStackReader {
             base: self.pos(),
@@ -377,7 +375,7 @@ fn generate_random_for_aux_vec() -> [u8; 16] {
 /// A reader to parse the content of an `InitStack`.
 pub struct InitStackReader<'a> {
     base: Vaddr,
-    vmar: ProcessVmarGuard<'a>,
+    vmar: &'a Vmar<Full>,
     /// The mapping address of the `InitStack`.
     map_addr: usize,
 }
@@ -388,7 +386,7 @@ impl InitStackReader<'_> {
         let stack_base = self.init_stack_bottom();
         let page_base_addr = stack_base.align_down(PAGE_SIZE);
 
-        let vm_space = self.vmar.unwrap().vm_space();
+        let vm_space = self.vmar.vm_space();
         let preempt_guard = disable_preempt();
         let mut cursor = vm_space.cursor(
             &preempt_guard,
@@ -418,7 +416,7 @@ impl InitStackReader<'_> {
         let mut argv = Vec::with_capacity(argc);
         let page_base_addr = read_offset.align_down(PAGE_SIZE);
 
-        let vm_space = self.vmar.unwrap().vm_space();
+        let vm_space = self.vmar.vm_space();
         let preempt_guard = disable_preempt();
         let mut cursor = vm_space.cursor(
             &preempt_guard,
@@ -468,7 +466,7 @@ impl InitStackReader<'_> {
         let mut envp = Vec::new();
         let page_base_addr = read_offset.align_down(PAGE_SIZE);
 
-        let vm_space = self.vmar.unwrap().vm_space();
+        let vm_space = self.vmar.vm_space();
         let preempt_guard = disable_preempt();
         let mut cursor = vm_space.cursor(
             &preempt_guard,

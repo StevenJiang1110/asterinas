@@ -9,7 +9,7 @@ use self::timer_manager::PosixTimerManager;
 use super::{
     posix_thread::AsPosixThread,
     process_table,
-    process_vm::{Heap, InitStackReader, ProcessVm, ProcessVmarGuard},
+    process_vm::ProcessVm,
     rlimit::ResourceLimits,
     signal::{
         sig_disposition::SigDispositions,
@@ -74,12 +74,13 @@ pub struct Process {
     // Immutable Part
     pid: Pid,
 
-    process_vm: ProcessVm,
     /// Wait for child status changed
     children_wait_queue: WaitQueue,
     pub(super) pidfile_pollee: Pollee,
 
     // Mutable Part
+    /// The process virtual memory.
+    process_vm: Mutex<ProcessVm>,
     /// The executable path.
     executable_path: RwLock<String>,
     /// The threads
@@ -223,11 +224,11 @@ impl Process {
 
         Arc::new_cyclic(|process_ref: &Weak<Process>| Self {
             pid,
-            tasks: Mutex::new(TaskSet::new()),
-            executable_path: RwLock::new(executable_path),
-            process_vm,
             children_wait_queue,
             pidfile_pollee: Pollee::new(),
+            process_vm: Mutex::new(process_vm),
+            executable_path: RwLock::new(executable_path),
+            tasks: Mutex::new(TaskSet::new()),
             status: ProcessStatus::default(),
             parent: ParentProcess::new(Weak::new()),
             children: Mutex::new(Some(BTreeMap::new())),
@@ -613,20 +614,8 @@ impl Process {
 
     // ************** Virtual Memory *************
 
-    pub fn vm(&self) -> &ProcessVm {
+    pub fn vm(&self) -> &Mutex<ProcessVm> {
         &self.process_vm
-    }
-
-    pub fn lock_root_vmar(&self) -> ProcessVmarGuard {
-        self.process_vm.lock_root_vmar()
-    }
-
-    pub fn heap(&self) -> &Heap {
-        self.process_vm.heap()
-    }
-
-    pub fn init_stack_reader(&self) -> InitStackReader {
-        self.process_vm.init_stack_reader()
     }
 
     // ****************** Signal ******************
