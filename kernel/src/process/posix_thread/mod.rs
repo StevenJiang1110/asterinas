@@ -19,7 +19,7 @@ use crate::{
     fs::{file_table::FileTable, thread_info::ThreadFsInfo},
     namespace::NsContext,
     prelude::*,
-    process::signal::{constants::SIGCONT, PollHandle},
+    process::signal::{constants::{SIGCONT, SIGPIPE}, PollHandle},
     thread::{Thread, Tid},
     time::{clocks::ProfClock, Timer, TimerManager},
 };
@@ -190,6 +190,10 @@ impl PosixThread {
     pub fn enqueue_signal(&self, signal: Box<dyn Signal>) {
         let process = self.process();
         let sig_dispositions = process.sig_dispositions().lock();
+
+        if signal.num() == SIGPIPE {
+            println!("the default action for SIGPIPE is {:?}", sig_dispositions.get(signal.num()));
+        }
 
         let will_ignore = sig_dispositions.will_ignore(signal.as_ref());
         let blocked = self.has_signal_blocked(signal.num());

@@ -424,10 +424,10 @@ impl LookupCtx {
 
 #[derive(Debug)]
 /// Arguments for an open request.
-struct OpenArgs {
+pub struct OpenArgs {
     creation_flags: CreationFlags,
-    status_flags: StatusFlags,
-    access_mode: AccessMode,
+    pub status_flags: StatusFlags,
+    pub access_mode: AccessMode,
     inode_mode: InodeMode,
 }
 

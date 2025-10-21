@@ -12,7 +12,7 @@ use crate::{
         utils::{AccessMode, StatusFlags},
     },
     prelude::*,
-    process::signal::{PollHandle, Pollable},
+    process::{posix_thread::AsPosixThread, signal::{constants::SIGPIPE, signals::kernel::KernelSignal, PollHandle, Pollable}},
 };
 
 /// A handle representing the reader end of a named pipe.
@@ -31,6 +31,7 @@ impl Pollable for ReadHandle {
 
 impl Drop for ReadHandle {
     fn drop(&mut self) {
+        println!("drop read handle");
         self.inner.0.state.peer_shutdown();
     }
 }
@@ -51,6 +52,7 @@ impl Pollable for WriteHandle {
 
 impl Drop for WriteHandle {
     fn drop(&mut self) {
+        println!("drop write handle");
         self.inner.1.state.shutdown();
     }
 }
@@ -96,7 +98,9 @@ impl NamedPipeHandle {
             HandleInner::Reader(_) => {
                 Err(Error::with_message(Errno::EBADF, "not opened for writing"))
             }
-            HandleInner::Writer(handle) => handle.inner.1.try_write(reader),
+            HandleInner::Writer(handle) => {
+                handle.inner.1.try_write(reader)
+            }
             HandleInner::ReaderWriter(_, writer) => writer.inner.1.try_write(reader),
         }
     }

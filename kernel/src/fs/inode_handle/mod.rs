@@ -31,17 +31,17 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct InodeHandle<R = Rights>(Arc<InodeHandle_>, R);
+pub struct InodeHandle<R = Rights>(pub Arc<InodeHandle_>, pub R);
 
-struct InodeHandle_ {
-    path: Path,
+pub struct InodeHandle_ {
+    pub path: Path,
     /// `file_io` is Similar to `file_private` field in `file` structure in linux. If
     /// `file_io` is Some, typical file operations including `read`, `write`, `poll`,
     /// `ioctl` will be provided by `file_io`, instead of `path`.
-    file_io: Option<Arc<dyn FileIo>>,
-    offset: Mutex<usize>,
-    access_mode: AccessMode,
-    status_flags: AtomicU32,
+    pub file_io: Option<Arc<dyn FileIo>>,
+    pub offset: Mutex<usize>,
+    pub access_mode: AccessMode,
+    pub status_flags: AtomicU32,
 }
 
 impl InodeHandle_ {
