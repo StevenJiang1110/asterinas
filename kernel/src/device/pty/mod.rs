@@ -38,9 +38,9 @@ pub fn init_in_first_process(fs_resolver: &FsResolver, ctx: &Context) -> Result<
     Ok(())
 }
 
-pub fn new_pty_pair(index: u32, ptmx: Arc<dyn Inode>) -> Result<(Arc<PtyMaster>, Arc<PtySlave>)> {
+pub fn new_pty_pair(index: u32, devpts: Arc<DevPts>) -> Result<(Arc<PtyMaster>, Arc<PtySlave>)> {
     debug!("pty index = {}", index);
-    let master = PtyMaster::new(ptmx, index);
+    let master = PtyMaster::new(devpts, index);
     let slave = master.slave().clone();
     Ok((master, slave))
 }

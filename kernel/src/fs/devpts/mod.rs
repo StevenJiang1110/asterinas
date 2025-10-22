@@ -60,14 +60,16 @@ impl DevPts {
     }
 
     /// Create the master and slave pair.
-    fn create_master_slave_pair(&self) -> Result<(Arc<PtyMaster>, Arc<PtySlaveInode>)> {
+    fn create_master_slave_pair(
+        self: &Arc<DevPts>,
+    ) -> Result<(Arc<PtyMaster>, Arc<PtySlaveInode>)> {
         let index = self
             .index_alloc
             .lock()
             .alloc()
             .ok_or_else(|| Error::with_message(Errno::EIO, "cannot alloc index"))?;
 
-        let (master, slave) = crate::device::new_pty_pair(index as u32, self.root.ptmx.clone())?;
+        let (master, slave) = crate::device::new_pty_pair(index as u32, self.clone())?;
 
         let slave_inode = PtySlaveInode::new(slave, self.this.clone());
         self.root.add_slave(index.to_string(), slave_inode.clone());

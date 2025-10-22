@@ -19,7 +19,10 @@ use crate::{
     fs::{file_table::FileTable, thread_info::ThreadFsInfo},
     namespace::NsContext,
     prelude::*,
-    process::signal::{constants::{SIGCONT, SIGPIPE}, PollHandle},
+    process::signal::{
+        constants::{SIGCONT, SIGPIPE},
+        PollHandle,
+    },
     thread::{Thread, Tid},
     time::{clocks::ProfClock, Timer, TimerManager},
 };
@@ -192,7 +195,10 @@ impl PosixThread {
         let sig_dispositions = process.sig_dispositions().lock();
 
         if signal.num() == SIGPIPE {
-            println!("the default action for SIGPIPE is {:?}", sig_dispositions.get(signal.num()));
+            println!(
+                "the default action for SIGPIPE is {:?}",
+                sig_dispositions.get(signal.num())
+            );
         }
 
         let will_ignore = sig_dispositions.will_ignore(signal.as_ref());

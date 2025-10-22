@@ -35,15 +35,15 @@ const IO_CAPACITY: usize = 4096;
 ///
 /// [`Tty`]: crate::device::tty::Tty
 pub struct PtyMaster {
-    ptmx: Arc<dyn Inode>,
+    devpts: Arc<DevPts>,
     slave: Arc<PtySlave>,
 }
 
 impl PtyMaster {
-    pub(super) fn new(ptmx: Arc<dyn Inode>, index: u32) -> Arc<Self> {
+    pub(super) fn new(devpts: Arc<DevPts>, index: u32) -> Arc<Self> {
         let slave = PtySlave::new(index, PtyDriver::new());
 
-        Arc::new(Self { ptmx, slave })
+        Arc::new(Self { devpts, slave })
     }
 
     pub(super) fn slave(&self) -> &Arc<PtySlave> {
@@ -79,7 +79,17 @@ impl FileIo for PtyMaster {
         // TODO: Add support for non-blocking mode and timeout
         let mut buf = vec![0u8; writer.avail().min(IO_CAPACITY)];
         let read_len = self.wait_events(IoEvents::IN, None, || {
-            self.slave.driver().try_read(&mut buf)
+            let res = self.slave.driver().try_read(&mut buf);
+
+            if let Err(ref e) = res
+                && e.error() == Errno::EAGAIN
+            {
+                if Arc::strong_count(&self.slave) == 2 {
+                    return Ok(0);
+                }
+            }
+
+            res
         })?;
         self.slave.driver().pollee().invalidate();
         self.slave.notify_output();
@@ -159,10 +169,7 @@ impl FileIo for PtyMaster {
 
 impl Drop for PtyMaster {
     fn drop(&mut self) {
-        let fs = self.ptmx.fs();
-        let devpts = fs.downcast_ref::<DevPts>().unwrap();
-
         let index = self.slave.index();
-        devpts.remove_slave(index);
+        self.devpts.remove_slave(index);
     }
 }

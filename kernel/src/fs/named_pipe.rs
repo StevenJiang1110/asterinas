@@ -12,7 +12,10 @@ use crate::{
         utils::{AccessMode, StatusFlags},
     },
     prelude::*,
-    process::{posix_thread::AsPosixThread, signal::{constants::SIGPIPE, signals::kernel::KernelSignal, PollHandle, Pollable}},
+    process::{
+        posix_thread::AsPosixThread,
+        signal::{constants::SIGPIPE, signals::kernel::KernelSignal, PollHandle, Pollable},
+    },
 };
 
 /// A handle representing the reader end of a named pipe.
