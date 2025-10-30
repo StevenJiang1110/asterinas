@@ -1,5 +1,5 @@
 { lib, stdenvNoCC, fetchFromGitHub, hostPlatform, writeClosure, busybox, apps
-, benchmark, syscall, callPackage, pkgs }:
+, benchmark, syscall, callPackage, cacert, pkgs }:
 let
   etc = lib.fileset.toSource {
     root = ./../src/etc;
@@ -25,7 +25,7 @@ let
     patches = (oldAttrs.patches or [ ])
       ++ [ ./podman/0001-Patch-podman-for-Asterinas.patch ];
   })).override { runc = patched_runc; };
-  all_pkgs = [ busybox etc podman ]
+  all_pkgs = [ busybox etc podman cacert ]
     ++ lib.optionals (apps != null) [ apps.package ]
     ++ lib.optionals (benchmark != null) [ benchmark.package ]
     ++ lib.optionals (syscall != null) [ syscall.package ];
@@ -53,12 +53,12 @@ in stdenvNoCC.mkDerivation {
     cp -r ${podman} $out/nix/store/
 
     cp -r ${host_etc}/resolv.conf $out/etc
-    mkdir -p $out/etc/ssl/certs
-    cp -r ${host_etc}/ssl/certs/ca-certificates.crt $out/etc/ssl/certs
 
     mkdir -p $out/usr/lib/x86_64-linux-gnu
 
     cp -r ${etc}/* $out/etc/
+    mkdir -p $out/etc/ssl/certs
+    cp -r ${cacert}/etc/ssl/certs/ca-bundle.crt $out/etc/ssl/certs/ca-certificates.crt
 
     mkdir -p $out/podman-hello-image
     cp -r ${podman-hello-image}/* $out/podman-hello-image/
