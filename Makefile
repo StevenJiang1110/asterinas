@@ -47,6 +47,13 @@ VHOST ?= off
 DNS_SERVER ?= none
 # End of network settings
 
+# NixOS settings
+NIXOS ?= 0
+NIXOS_DISK_SIZE_IN_MB ?= 8196
+NIXOS_STAGE_2_INIT ?= /bin/sh
+NIXOS_STAGE_2_ARGS ?= ""
+# End of NixOS settings
+
 # ========================= End of Makefile options. ==========================
 
 SHELL := /bin/bash
@@ -138,6 +145,11 @@ CARGO_OSDK_COMMON_ARGS += --features="$(FEATURES)"
 endif
 ifeq ($(NO_DEFAULT_FEATURES), 1)
 CARGO_OSDK_COMMON_ARGS += --no-default-features
+endif
+
+ifeq ($(NIXOS), 1)
+BOOT_PROTOCOL = linux-efi-handover64
+OVMF=off
 endif
 
 # To test the linux-efi-handover64 boot protocol, we need to use Debian's
@@ -266,15 +278,22 @@ initramfs: check_vdso
 
 .PHONY: build
 build: initramfs $(CARGO_OSDK)
-	@cd kernel && cargo osdk build $(CARGO_OSDK_BUILD_ARGS)
+	@cd kernel && cargo osdk build $(CARGO_OSDK_BUILD_ARGS) && cd ..
+ifeq ($(NIXOS),1)
+	@./tools/nixos/install-asterinas.sh target/nixos
+endif
 
 .PHONY: tools
 tools:
 	@cd kernel/libs/comp-sys && cargo install --path cargo-component
 
 .PHONY: run
-run: initramfs $(CARGO_OSDK)
+run: initramfs build $(CARGO_OSDK)
+ifeq ($(NIXOS),1)
+	@./tools/nixos/run_nixos.sh target/nixos
+else
 	@cd kernel && cargo osdk run $(CARGO_OSDK_BUILD_ARGS)
+endif
 # Check the running status of auto tests from the QEMU log
 ifeq ($(AUTO_TEST), syscall)
 	@tail --lines 100 qemu.log | grep -q "^All syscall tests passed." \
@@ -340,6 +359,7 @@ book:
 .PHONY: format
 format:
 	@./tools/format_all.sh
+	@./tools/nixos/format_distro.sh
 	@$(MAKE) --no-print-directory -C test format
 
 .PHONY: check
@@ -387,6 +407,15 @@ check: initramfs $(CARGO_OSDK)
 
 .PHONY: clean
 clean:
+	@echo "Cleaning up NixOS mount points"
+	@if findmnt -M ./target/nixos/nixos_rootfs/boot >/dev/null; then \
+		umount -d ./target/nixos/nixos_rootfs/boot; \
+	fi
+	@if findmnt -M ./target/nixos/nixos_rootfs >/dev/null; then \
+		umount -d ./target/nixos/nixos_rootfs; \
+	fi
+	@echo "Cleanup unused loop device"
+	@losetup -D
 	@echo "Cleaning up Asterinas workspace target files"
 	@cargo clean
 	@echo "Cleaning up OSDK workspace target files"
