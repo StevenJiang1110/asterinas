@@ -145,7 +145,7 @@ impl From<DirEntryFileType> for InodeType {
             DirEntryFileType::File => Self::File,
             DirEntryFileType::Symlink => Self::SymLink,
             DirEntryFileType::Socket => Self::Socket,
-            DirEntryFileType::Unknown => panic!("unknown file type"),
+            DirEntryFileType::Unknown => Self::Unknown,
         }
     }
 }
@@ -269,7 +269,7 @@ impl DirEntryIter<'_> {
             .page_cache
             .pages()
             .read_val::<DirEntryHeader>(self.offset)?;
-        if header.ino == 0 {
+        if header.record_len == 0 {
             return_errno!(Errno::ENOENT);
         }
         Ok(header)
