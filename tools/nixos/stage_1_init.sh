@@ -36,7 +36,11 @@ fi
 
 mkdir /sysroot
 mount -t ext2 $NEW_ROOT /sysroot
+mount -t tmpfs none /sysroot/run
 mount -t proc none /sysroot/proc
+mount -t sysfs none /sysroot/sys
+mount -t cgroup2 none /sysroot/sys/fs/cgroup
+mount -t configfs none /sysroot/sys/kernel/config
 mount --move /dev /sysroot/dev
 
 exec switch_root /sysroot $NEW_INIT $ARGS
