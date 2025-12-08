@@ -20,8 +20,8 @@
   environment.systemPackages = with pkgs; [ hello-asterinas ];
 
   # Uncomment the following two lines to enable Podman.
-  # virtualisation.podman.enable = true;
-  # virtualisation.containers.enable = true;
+  virtualisation.podman.enable = true;
+  virtualisation.containers.enable = true;
 
   system.nixos.distroName = "Asterinas NixOS";
 
