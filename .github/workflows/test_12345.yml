@@ -1,0 +1,33 @@
+name: "Test sctrace"
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  basic-test:
+    runs-on: ubuntu-latest
+    container:
+      image: asterinas/asterinas:0.17.0-20251213
+      options: --device=/dev/kvm --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run basic tests
+        run : |
+          echo "test env"
+          echo "shell = $SHELL"
+          echo "aster_scml = $ASTER_SCML"
+          echo "................."
+          cat /root/.bashrc
+          echo "................."
+          bash
+          echo "shell = $SHELL"
+          echo "aster_scml = $ASTER_SCML"
+          echo "................."
+          echo "****************"
+          source /root/.bashrc
+          echo "++++++++++++++++"
+          echo "aster_scml = $ASTER_SCML"
