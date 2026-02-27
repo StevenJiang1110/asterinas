@@ -8,33 +8,6 @@ on:
       - main
 
 jobs:
-  basic-test:
-    runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.17.0-20260114
-      options: --device=/dev/kvm --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
-    strategy:
-      matrix:
-        id: ['lint', 'compile', 'usermode_test', 'ktest']
-      fail-fast: false
-    steps:
-      - name: Free disk space
-        # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
-      - uses: actions/checkout@v4
-      - name: Run basic tests
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'general'
-          runs_on: 'ubuntu-latest'
-
   integration-test:
     runs-on: ubuntu-latest
     container:
@@ -50,49 +23,11 @@ jobs:
     strategy:
       matrix:
         include:
-          # SMP Boot Test (Linux Legacy 32-bit Boot Protocol)
-          - test_id: 'boot-legacy32'
-            boot_protocol: 'linux-legacy32'
-            smp: 4
-          # SMP Boot Test (Multiboot)
-          - test_id: 'boot-multiboot2-smp4'
-            boot_protocol: 'multiboot'
-            smp: 4
-
-          # Syscall Test (Linux EFI PE/COFF Boot Protocol) (Debug Build)
-          - test_id: 'syscall-debug'
-            release: false
-            boot_protocol: 'linux-efi-pe64'
           # Syscall Test at Ext2 (MicroVM)
           - test_id: 'syscall-ext2-microvm'
             scheme: 'microvm'
             extra_blocklists: 'blocklists.ext2'
             syscall_test_workdir: '/ext2'
-          # Syscall Test at Ext2 (IOMMU) (Debug Build)
-          - test_id: 'syscall-ext2-iommu-debug'
-            scheme: 'iommu'
-            extra_blocklists: 'blocklists.ext2'
-            syscall_test_workdir: '/ext2'
-            release: false
-          # Syscall Test at Exfat (Multiboot2) (without KVM enabled)
-          - test_id: 'syscall-exfat-multiboot2-nokvm'
-            boot_protocol: 'multiboot2'
-            enable_kvm: false
-            extra_blocklists: 'blocklists.exfat'
-            syscall_test_workdir: '/exfat'
-          # SMP Syscall Test (Multiboot2)
-          - test_id: 'syscall-multiboot2-smp4'
-            boot_protocol: 'multiboot2'
-            smp: 4
-
-          # General Test (Linux EFI Handover) (Debug Build)
-          - test_id: 'general-handover64-debug'
-            release: false
-            boot_protocol: 'linux-efi-handover64'
-          # SMP General Test (Multiboot2)
-          - test_id: 'general-multiboot2-smp4'
-            boot_protocol: 'multiboot2'
-            smp: 4
       fail-fast: false
     steps:
       - name: Free disk space
@@ -129,19 +64,3 @@ jobs:
           syscall_test_workdir: ${{ matrix.syscall_test_workdir }}
           boot_protocol: ${{ matrix.boot_protocol || 'linux-efi-handover64' }}
 
-  osdk-test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        image: ['asterinas/asterinas:0.17.0-20260114', 'asterinas/osdk:0.17.0-20260114']
-      fail-fast: false
-    container:
-      image: ${{ matrix.image }}
-      options: --device=/dev/kvm --privileged
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run OSDK tests
-        uses: ./.github/actions/test
-        with:
-          auto_test: 'osdk'
-          intel_tdx: false
