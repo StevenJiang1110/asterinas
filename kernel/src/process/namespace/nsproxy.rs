@@ -4,6 +4,7 @@ use spin::Once;
 
 use crate::{
     fs::{cgroupfs::CgroupNamespace, vfs::path::MountNamespace},
+    ipc::IpcNamespace,
     net::uts_ns::UtsNamespace,
     prelude::*,
     process::{CloneFlags, Process, UserNamespace, posix_thread::PosixThread},
@@ -19,6 +20,7 @@ use crate::{
 pub struct NsProxy {
     cgroup_ns: Arc<CgroupNamespace>,
     mnt_ns: Arc<MountNamespace>,
+    ipc_ns: Arc<IpcNamespace>,
     uts_ns: Arc<UtsNamespace>,
 }
 
@@ -30,6 +32,7 @@ impl NsProxy {
             Arc::new(NsProxy {
                 cgroup_ns: CgroupNamespace::get_init_singleton().clone(),
                 mnt_ns: MountNamespace::get_init_singleton().clone(),
+                ipc_ns: IpcNamespace::get_init_singleton().clone(),
                 uts_ns: UtsNamespace::get_init_singleton().clone(),
             })
         })
@@ -53,14 +56,9 @@ impl NsProxy {
     ) -> Result<Arc<Self>> {
         let clone_ns_flags = (clone_flags & CloneFlags::CLONE_NS_FLAGS) - CloneFlags::CLONE_NEWUSER;
 
-        // Fast path: If there are no new namespaces to clone,
-        // we can directly clone the proxy and return.
         if clone_ns_flags.is_empty() {
             return Ok(self.clone());
         }
-
-        // Slow path: One or more namespaces need to be cloned,
-        // so a new `NsProxy` must be created.
 
         check_unsupported_ns_flags(clone_ns_flags)?;
 
@@ -78,9 +76,14 @@ impl NsProxy {
             builder.mnt_ns(new_mnt_ns);
         }
 
+        if clone_ns_flags.contains(CloneFlags::CLONE_NEWIPC) {
+            let new_ipc_ns = self.ipc_ns.new_clone(user_ns.clone(), posix_thread)?;
+            builder.ipc_ns(new_ipc_ns);
+        }
+
         if clone_ns_flags.contains(CloneFlags::CLONE_NEWUTS) {
-            let uts_ns = self.uts_ns.new_clone(user_ns.clone(), posix_thread)?;
-            builder.uts_ns(uts_ns);
+            let new_uts_ns = self.uts_ns.new_clone(user_ns.clone(), posix_thread)?;
+            builder.uts_ns(new_uts_ns);
         }
 
         // TODO: Support other namespaces.
@@ -98,6 +101,11 @@ impl NsProxy {
         &self.mnt_ns
     }
 
+    /// Returns the associated IPC namespace.
+    pub fn ipc_ns(&self) -> &Arc<IpcNamespace> {
+        &self.ipc_ns
+    }
+
     /// Returns the associated UTS namespace.
     pub fn uts_ns(&self) -> &Arc<UtsNamespace> {
         &self.uts_ns
@@ -108,10 +116,9 @@ impl NsProxy {
 /// from an existing one.
 pub struct NsProxyBuilder<'a> {
     old_proxy: &'a NsProxy,
-
-    // Fields for new namespaces.
     cgroup_ns: Option<Arc<CgroupNamespace>>,
     mnt_ns: Option<Arc<MountNamespace>>,
+    ipc_ns: Option<Arc<IpcNamespace>>,
     uts_ns: Option<Arc<UtsNamespace>>,
 }
 
@@ -122,6 +129,7 @@ impl<'a> NsProxyBuilder<'a> {
             old_proxy,
             cgroup_ns: None,
             mnt_ns: None,
+            ipc_ns: None,
             uts_ns: None,
         }
     }
@@ -138,6 +146,12 @@ impl<'a> NsProxyBuilder<'a> {
         self
     }
 
+    /// Sets the new IPC namespace for the context being built.
+    pub fn ipc_ns(&mut self, ipc_ns: Arc<IpcNamespace>) -> &mut Self {
+        self.ipc_ns = Some(ipc_ns);
+        self
+    }
+
     /// Sets the new UTS namespace for the context being built.
     pub fn uts_ns(&mut self, uts_ns: Arc<UtsNamespace>) -> &mut Self {
         self.uts_ns = Some(uts_ns);
@@ -150,16 +164,19 @@ impl<'a> NsProxyBuilder<'a> {
             old_proxy,
             cgroup_ns: new_cgroup,
             mnt_ns: new_mnt,
+            ipc_ns: new_ipc,
             uts_ns: new_uts,
         } = self;
 
         let new_cgroup = new_cgroup.unwrap_or_else(|| old_proxy.cgroup_ns.clone());
         let new_mnt = new_mnt.unwrap_or_else(|| old_proxy.mnt_ns.clone());
+        let new_ipc = new_ipc.unwrap_or_else(|| old_proxy.ipc_ns.clone());
         let new_uts = new_uts.unwrap_or_else(|| old_proxy.uts_ns.clone());
 
         NsProxy {
             cgroup_ns: new_cgroup,
             mnt_ns: new_mnt,
+            ipc_ns: new_ipc,
             uts_ns: new_uts,
         }
     }
@@ -167,10 +184,11 @@ impl<'a> NsProxyBuilder<'a> {
 
 /// Checks if the given `flags` contain any unsupported namespace-related flags.
 ///
-/// This method does _not_ check CLONE_NEWUSER since it's handled separately.
+/// This method does _not_ check `CLONE_NEWUSER` since it is handled separately.
 pub fn check_unsupported_ns_flags(flags: CloneFlags) -> Result<()> {
     const SUPPORTED_FLAGS: CloneFlags = CloneFlags::CLONE_NEWCGROUP
         .union(CloneFlags::CLONE_NEWNS)
+        .union(CloneFlags::CLONE_NEWIPC)
         .union(CloneFlags::CLONE_NEWUTS);
 
     let unsupported_flags =

@@ -20,6 +20,7 @@ use crate::{
             path::{MountNamespace, Path},
         },
     },
+    ipc::IpcNamespace,
     net::uts_ns::UtsNamespace,
     prelude::*,
     process::{NsProxy, UserNamespace, posix_thread::AsPosixThread},
@@ -51,19 +52,22 @@ enum NsProxyEntry {
     Cgroup,
     /// The mount namespace.
     Mnt,
+    /// The IPC namespace.
+    Ipc,
     /// The UTS namespace.
     Uts,
 }
 
 impl NsProxyEntry {
     /// All supported `NsProxy`-backed namespace entries.
-    const ALL: &[Self] = &[Self::Cgroup, Self::Mnt, Self::Uts];
+    const ALL: &[Self] = &[Self::Cgroup, Self::Mnt, Self::Ipc, Self::Uts];
 
     /// Returns the filename of this namespace entry under `/proc/[pid]/ns/`.
     fn as_str(self) -> &'static str {
         match self {
             Self::Cgroup => "cgroup",
             Self::Mnt => "mnt",
+            Self::Ipc => "ipc",
             Self::Uts => "uts",
         }
     }
@@ -73,6 +77,7 @@ impl NsProxyEntry {
         match s {
             "cgroup" => Some(Self::Cgroup),
             "mnt" => Some(Self::Mnt),
+            "ipc" => Some(Self::Ipc),
             "uts" => Some(Self::Uts),
             _ => None,
         }
@@ -87,6 +92,7 @@ impl NsProxyEntry {
             Self::Mnt => {
                 NsSymOps::<MountNamespace>::new_inode(ns_proxy.mnt_ns().get_path(), parent)
             }
+            Self::Ipc => NsSymOps::<IpcNamespace>::new_inode(ns_proxy.ipc_ns().get_path(), parent),
             Self::Uts => NsSymOps::<UtsNamespace>::new_inode(ns_proxy.uts_ns().get_path(), parent),
         }
     }
@@ -96,6 +102,7 @@ impl NsProxyEntry {
         match self {
             Self::Cgroup => ns_proxy.cgroup_ns().get_path(),
             Self::Mnt => ns_proxy.mnt_ns().get_path(),
+            Self::Ipc => ns_proxy.ipc_ns().get_path(),
             Self::Uts => ns_proxy.uts_ns().get_path(),
         }
     }
@@ -114,6 +121,9 @@ fn cached_ns_path(inode: &dyn Inode) -> Option<&Path> {
     if let Some(sym) = inode.downcast_ref::<NsSymlink<UserNamespace>>() {
         return Some(&sym.inner().ns_path);
     }
+    if let Some(sym) = inode.downcast_ref::<NsSymlink<IpcNamespace>>() {
+        return Some(&sym.inner().ns_path);
+    }
     if let Some(sym) = inode.downcast_ref::<NsSymlink<UtsNamespace>>() {
         return Some(&sym.inner().ns_path);
     }
@@ -130,7 +140,6 @@ impl DirOps for NsDirOps {
                 let user_ns = self.dir.process_ref.user_ns().lock();
                 user_ns.get_path()
             };
-            // Reuse the cached inode if the user namespace hasn't changed.
             if let Some(cached) = cached_children.find_entry_by_name(name)
                 && cached_ns_path(&**cached) == Some(&current_path)
             {
@@ -143,7 +152,6 @@ impl DirOps for NsDirOps {
             return Ok(inode);
         }
 
-        // Validate the name and get the current namespace path.
         let entry = NsProxyEntry::from_str(name)
             .ok_or_else(|| Error::with_message(Errno::ENOENT, "the file does not exist"))?;
 
@@ -154,7 +162,6 @@ impl DirOps for NsDirOps {
             .ok_or_else(|| Error::with_message(Errno::ENOENT, "the thread has exited"))?;
         let current_path = entry.current_path(ns_proxy);
 
-        // Reuse the cached inode if the namespace hasn't changed.
         if let Some(cached) = cached_children.find_entry_by_name(name)
             && cached_ns_path(&**cached) == Some(&current_path)
         {
@@ -173,8 +180,6 @@ impl DirOps for NsDirOps {
     ) -> RwMutexUpgradeableGuard<'a, SlotVec<(String, Arc<dyn Inode>)>> {
         let mut cached_children = dir.cached_children().write();
 
-        // Refresh `NsProxy`-backed entries only when the namespace has changed
-        // or the proxy has been dropped.
         let thread = self.dir.thread();
         let ns_proxy = thread.as_posix_thread().unwrap().ns_proxy().lock();
 
@@ -193,7 +198,6 @@ impl DirOps for NsDirOps {
                     }
                 }
                 None => {
-                    // `NsProxy` is gone; remove the stale entry if present.
                     cached_children.remove_entry_by_name(name);
                 }
             }
@@ -201,7 +205,6 @@ impl DirOps for NsDirOps {
 
         drop(ns_proxy);
 
-        // Refresh the user namespace entry only when it has changed.
         let user_ns_path = {
             let user_ns = self.dir.process_ref.user_ns().lock();
             user_ns.get_path()
@@ -238,11 +241,12 @@ impl DirOps for NsDirOps {
         if child.downcast_ref::<NsSymlink<CgroupNamespace>>().is_some() {
             return cached_path == &ns_proxy.cgroup_ns().get_path();
         }
-
         if child.downcast_ref::<NsSymlink<MountNamespace>>().is_some() {
             return cached_path == &ns_proxy.mnt_ns().get_path();
         }
-
+        if child.downcast_ref::<NsSymlink<IpcNamespace>>().is_some() {
+            return cached_path == &ns_proxy.ipc_ns().get_path();
+        }
         if child.downcast_ref::<NsSymlink<UtsNamespace>>().is_some() {
             return cached_path == &ns_proxy.uts_ns().get_path();
         }

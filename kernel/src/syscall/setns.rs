@@ -17,6 +17,7 @@ use crate::{
         pseudofs::{NsCommonOps, NsFile},
         vfs::path::MountNamespace,
     },
+    ipc::IpcNamespace,
     net::uts_ns::UtsNamespace,
     prelude::*,
     process::{
@@ -43,7 +44,6 @@ pub fn sys_setns(fd: RawFileDesc, flags: u32, ctx: &Context) -> Result<SyscallRe
         build_proxy_from_ns_file(file.as_ref(), ns_type_flags, ctx)?
     };
 
-    // Install the newly created `NsProxy`.
     ctx.set_ns_proxy(Arc::new(new_ns_proxy));
 
     Ok(SyscallReturn::Return(0))
@@ -58,7 +58,6 @@ fn build_proxy_from_pid_file(
         return_errno_with_message!(Errno::EINVAL, "flags must be specified with a PID file");
     }
 
-    // Check for any flags that are not namespace-related.
     if !(flags - CloneFlags::CLONE_NS_FLAGS).is_empty() {
         return_errno_with_message!(Errno::EINVAL, "invalid flags are specified with a PID file");
     }
@@ -84,18 +83,19 @@ fn build_proxy_from_pid_file(
     let mut builder = NsProxyBuilder::new(current_proxy);
 
     if flags.contains(CloneFlags::CLONE_NEWCGROUP) {
-        let target_ns = target_proxy.cgroup_ns();
-        set_cgroup_ns(&mut builder, target_ns, ctx)?;
+        set_cgroup_ns(&mut builder, target_proxy.cgroup_ns(), ctx)?;
     }
 
     if flags.contains(CloneFlags::CLONE_NEWNS) {
-        let target_ns = target_proxy.mnt_ns();
-        set_mnt_ns(&mut builder, target_ns, ctx)?;
+        set_mnt_ns(&mut builder, target_proxy.mnt_ns(), ctx)?;
+    }
+
+    if flags.contains(CloneFlags::CLONE_NEWIPC) {
+        set_ipc_ns(&mut builder, target_proxy.ipc_ns(), ctx)?;
     }
 
     if flags.contains(CloneFlags::CLONE_NEWUTS) {
-        let target_ns = target_proxy.uts_ns();
-        set_uts_ns(&mut builder, target_ns, ctx)?;
+        set_uts_ns(&mut builder, target_proxy.uts_ns(), ctx)?;
     }
 
     // TODO: Support setting other namespaces from the target process.
@@ -130,6 +130,9 @@ fn build_proxy_from_ns_file(
         })?
         || try_apply_ns_from_inode::<MountNamespace>(inode_handle, flags, |ns| {
             set_mnt_ns(&mut builder, &ns, ctx)
+        })?
+        || try_apply_ns_from_inode::<IpcNamespace>(inode_handle, flags, |ns| {
+            set_ipc_ns(&mut builder, &ns, ctx)
         })?
         || try_apply_ns_from_inode::<UtsNamespace>(inode_handle, flags, |ns| {
             set_uts_ns(&mut builder, &ns, ctx)
@@ -169,9 +172,7 @@ fn set_cgroup_ns(
     ctx: &Context,
 ) -> Result<()> {
     check_set_ns_perms(target_ns, ctx)?;
-
     builder.cgroup_ns(target_ns.clone());
-
     Ok(())
 }
 
@@ -192,7 +193,16 @@ fn set_mnt_ns(
     // TODO: Are the checks above sufficient?
 
     builder.mnt_ns(target_ns.clone());
+    Ok(())
+}
 
+fn set_ipc_ns(
+    builder: &mut NsProxyBuilder,
+    target_ns: &Arc<IpcNamespace>,
+    ctx: &Context,
+) -> Result<()> {
+    check_set_ns_perms(target_ns, ctx)?;
+    builder.ipc_ns(target_ns.clone());
     Ok(())
 }
 
@@ -202,15 +212,11 @@ fn set_uts_ns(
     ctx: &Context,
 ) -> Result<()> {
     check_set_ns_perms(target_ns, ctx)?;
-
     builder.uts_ns(target_ns.clone());
-
     Ok(())
 }
 
 fn check_set_ns_perms<T: NsCommonOps>(target_ns: &Arc<T>, ctx: &Context) -> Result<()> {
-    // Verify the thread has SYS_ADMIN capability in the target namespace's owner
-    // and the current user namespace.
     target_ns
         .owner_user_ns()
         .unwrap()
