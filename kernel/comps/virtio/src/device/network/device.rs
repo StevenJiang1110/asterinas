@@ -195,12 +195,7 @@ impl NetworkDevice {
         }
 
         let tx_pool = TX_BUFFER_POOL.get().unwrap();
-        let tx_buffer = TxBuffer::new(
-            &self.header,
-            &mut VmReader::from(packet).to_fallible(),
-            tx_pool,
-        )
-        .unwrap();
+        let tx_buffer = TxBuffer::new(&self.header, packet, tx_pool).unwrap();
 
         let token = self
             .send_queue

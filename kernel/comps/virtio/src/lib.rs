@@ -23,7 +23,7 @@ use device::{
     filesystem::device::FileSystemDevice,
     input::device::InputDevice,
     network::device::NetworkDevice,
-    socket::device::SocketDevice,
+    vsock::device::VsockDevice,
 };
 use ostd::{error, warn};
 use spin::Once;
@@ -47,7 +47,7 @@ fn virtio_component_init() -> Result<(), ComponentInitError> {
     transport::init();
 
     device::network::init();
-    device::socket::init();
+    device::vsock::init();
 
     while let Some(mut transport) = pop_device_transport() {
         // Reset device
@@ -78,7 +78,7 @@ fn virtio_component_init() -> Result<(), ComponentInitError> {
             VirtioDeviceType::Input => InputDevice::init(transport),
             VirtioDeviceType::Network => NetworkDevice::init(transport),
             VirtioDeviceType::Console => ConsoleDevice::init(transport),
-            VirtioDeviceType::Socket => SocketDevice::init(transport),
+            VirtioDeviceType::Socket => VsockDevice::init(transport),
             VirtioDeviceType::FileSystem => FileSystemDevice::init(transport),
             _ => {
                 warn!("[Virtio]: Found unimplemented device:{:?}", device_type);
@@ -114,7 +114,7 @@ fn negotiate_features(transport: &mut Box<dyn VirtioTransport>) {
         VirtioDeviceType::Block => BlockDevice::negotiate_features(device_specified_features),
         VirtioDeviceType::Input => InputDevice::negotiate_features(device_specified_features),
         VirtioDeviceType::Console => ConsoleDevice::negotiate_features(device_specified_features),
-        VirtioDeviceType::Socket => SocketDevice::negotiate_features(device_specified_features),
+        VirtioDeviceType::Socket => VsockDevice::negotiate_features(device_specified_features),
         VirtioDeviceType::FileSystem => {
             FileSystemDevice::negotiate_features(device_specified_features)
         }
