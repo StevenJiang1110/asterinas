@@ -383,10 +383,11 @@ impl Process {
         let mut pid_table = pid_table::pid_table_mut();
 
         if pid_table.contains_process_group(&self.pid) {
-            return_errno_with_message!(
-                Errno::EPERM,
-                "a process group leader cannot be moved to a new session"
-            );
+            return Ok(self.sid());
+            // return_errno_with_message!(
+            //     Errno::EPERM,
+            //     "a process group leader cannot be moved to a new session"
+            // );
         }
 
         let mut process_group_mut = self.process_group.lock();
