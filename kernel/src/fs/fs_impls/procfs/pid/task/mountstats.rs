@@ -41,7 +41,7 @@ pub struct MountStatsFileOps(TidDirOps);
 
 impl MountStatsFileOps {
     pub fn new_inode(dir: &TidDirOps, parent: Weak<dyn Inode>) -> Arc<dyn Inode> {
-        ProcFileBuilder::new(Self(dir.clone()), mkmod!(a+r))
+        ProcFileBuilder::new(Self(dir.clone()), mkmod!(u+r))
             .parent(parent)
             .build()
             .unwrap()

@@ -48,11 +48,23 @@ static int dir_not_contains(const char *path, const char *entry_name)
 // Helper function to read a file and check for a substring
 static int file_contains(const char *filepath, const char *substring)
 {
-	int fd = CHECK(open(filepath, O_RDONLY));
-	char buf[4096] = { 0 };
-	CHECK(read(fd, buf, sizeof(buf) - 1));
-	CHECK(close(fd));
-	return strstr(buf, substring) != NULL ? 0 : -1;
+	FILE *file = CHECK_WITH(fopen(filepath, "r"), _ret != NULL);
+	char buf[4096];
+
+	while (fgets(buf, sizeof(buf), file) != NULL) {
+		if (strstr(buf, substring) != NULL) {
+			CHECK(fclose(file));
+			return 0;
+		}
+	}
+
+	CHECK(fclose(file));
+	return -1;
+}
+
+static int file_not_contains(const char *filepath, const char *substring)
+{
+	return file_contains(filepath, substring) == 0 ? -1 : 0;
 }
 
 // Macro to wait for a child process and check its exit status
@@ -111,6 +123,36 @@ FN_TEST(chroot_mountinfo)
 		CHECK(chdir("/"));
 
 		CHECK(file_contains("/proc/self/mountinfo", "/nix /nix"));
+
+		exit(EXIT_SUCCESS);
+	} else {
+		WAIT_AND_CHECK_CHILD(pid);
+	}
+}
+END_TEST()
+
+FN_TEST(mountstats_metadata)
+{
+	struct stat st;
+
+	TEST_RES(stat("/proc/self/mountstats", &st),
+		 st.st_mode == (S_IFREG | 0400));
+	TEST_RES(file_contains("/proc/self/mountstats",
+			       " mounted on /proc with fstype proc"),
+		 _ret == 0);
+}
+END_TEST()
+
+FN_TEST(chroot_mountstats)
+{
+	pid_t pid = TEST_SUCC(fork());
+	if (pid == 0) {
+		CHECK(chroot("/foo"));
+		CHECK(chdir("/"));
+
+		CHECK(file_contains("/proc/self/mountstats",
+				    " mounted on /nix with fstype "));
+		CHECK(file_not_contains("/proc/self/mountstats", "/foo/nix"));
 
 		exit(EXIT_SUCCESS);
 	} else {
