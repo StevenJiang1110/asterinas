@@ -6,7 +6,7 @@ use super::SyscallReturn;
 use crate::{
     prelude::*,
     process::{
-        credentials::SecureBits,
+        credentials::{SecureBits, capabilities::CapSet},
         posix_thread::{ContextPthreadAdminApi, MAX_THREAD_NAME_LEN},
         signal::sig_num::SigNum,
     },
@@ -100,6 +100,15 @@ pub fn sys_prctl(
             let credentials = ctx.credentials_mut();
             credentials.set_securebits(securebits)?;
         }
+        PrctlCmd::PR_CAPBSET_READ(capability) => {
+            let credentials = ctx.posix_thread.credentials();
+            let has_capability = credentials.bounding_capset().contains(capability);
+            return Ok(SyscallReturn::Return(has_capability as _));
+        }
+        PrctlCmd::PR_CAPBSET_DROP(capability) => {
+            let credentials = ctx.credentials_mut();
+            credentials.drop_bounding_cap(capability)?;
+        }
         PrctlCmd::PR_GET_TIMERSLACK => {
             let slack_ns = ctx.posix_thread.timer_slack_ns();
             return Ok(SyscallReturn::Return(slack_ns as _));
@@ -129,6 +138,8 @@ const PR_GET_KEEPCAPS: i32 = 7;
 const PR_SET_KEEPCAPS: i32 = 8;
 const PR_SET_NAME: i32 = 15;
 const PR_GET_NAME: i32 = 16;
+const PR_CAPBSET_READ: i32 = 23;
+const PR_CAPBSET_DROP: i32 = 24;
 const PR_GET_SECUREBITS: i32 = 27;
 const PR_SET_SECUREBITS: i32 = 28;
 const PR_SET_TIMERSLACK: i32 = 29;
@@ -153,6 +164,8 @@ pub enum PrctlCmd {
     PR_GET_CHILD_SUBREAPER(Vaddr),
     PR_GET_SECUREBITS,
     PR_SET_SECUREBITS(SecureBits),
+    PR_CAPBSET_READ(CapSet),
+    PR_CAPBSET_DROP(CapSet),
 }
 
 #[repr(u64)]
@@ -161,6 +174,14 @@ pub enum Dumpable {
     Disable = 0, /* No setuid dumping */
     User = 1,    /* Dump as user of process */
     Root = 2,    /* Dump as root */
+}
+
+fn prctl_capability(capability_index: u64) -> Result<CapSet> {
+    if capability_index > CapSet::most_significant_bit() as u64 {
+        return_errno_with_message!(Errno::EINVAL, "invalid capability");
+    }
+
+    Ok(CapSet::from_bits_truncate(1u64 << capability_index))
 }
 
 impl PrctlCmd {
@@ -185,6 +206,8 @@ impl PrctlCmd {
             PR_SET_SECUREBITS => Ok(PrctlCmd::PR_SET_SECUREBITS(SecureBits::try_from(
                 arg2 as u16,
             )?)),
+            PR_CAPBSET_READ => Ok(PrctlCmd::PR_CAPBSET_READ(prctl_capability(arg2)?)),
+            PR_CAPBSET_DROP => Ok(PrctlCmd::PR_CAPBSET_DROP(prctl_capability(arg2)?)),
             _ => {
                 debug!("prctl cmd number: {}", option);
                 return_errno_with_message!(Errno::EINVAL, "unsupported prctl command");
