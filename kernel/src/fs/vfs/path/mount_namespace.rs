@@ -2,6 +2,7 @@
 
 use spin::Once;
 
+use super::mount::MountNsFileCopying;
 use crate::{
     fs::{
         fs_impls::ramfs::RamFs,
@@ -25,6 +26,26 @@ pub struct MountNamespace {
     owner: Arc<UserNamespace>,
     /// The stashed dentry in nsfs.
     stashed_dentry: StashedDentry,
+}
+
+impl PartialEq for MountNamespace {
+    fn eq(&self, other: &Self) -> bool {
+        self.stashed_dentry == other.stashed_dentry
+    }
+}
+
+impl Eq for MountNamespace {}
+
+impl PartialOrd for MountNamespace {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MountNamespace {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.stashed_dentry.cmp(&other.stashed_dentry)
+    }
 }
 
 impl MountNamespace {
@@ -79,8 +100,12 @@ impl MountNamespace {
 
         let root_mount = &self.root;
         let new_mnt_ns = Arc::new_cyclic(|weak_self| {
-            let new_root =
-                root_mount.clone_mount_tree(root_mount.root_dentry(), Some(weak_self), true);
+            let new_root = root_mount.clone_mount_tree(
+                root_mount.root_dentry(),
+                weak_self,
+                true,
+                MountNsFileCopying::Skip,
+            );
             let stashed_dentry = StashedDentry::new();
             MountNamespace {
                 root: new_root,

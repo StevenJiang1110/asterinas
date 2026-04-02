@@ -7,6 +7,7 @@ use core::time::Duration;
 pub(in crate::fs) use dentry::Dentry;
 use dentry::DirDentry;
 use inherit_methods_macro::inherit_methods;
+use mount::MountNsFileCopying;
 pub use mount::{Mount, MountPropType, PerMountFlags};
 pub use mount_namespace::MountNamespace;
 pub use resolver::{AT_FDCWD, AbsPathResult, FsPath, LookupResult, PathResolver, SplitPath};
@@ -16,6 +17,7 @@ use crate::{
         file::{
             CreationFlags, InodeHandle, InodeMode, InodeType, OpenArgs, Permission, StatusFlags,
         },
+        pseudofs::NsInode,
         vfs::{
             file_system::{FileSystem, FsFlags},
             inode::{Inode, Metadata, MknodType},
@@ -242,6 +244,46 @@ impl Path {
     }
 }
 
+/// Returns `true` if `dentry` references the current or an older mount namespace.
+///
+/// Bind-mounting or moving such a mount-namespace file into the current mount
+/// namespace would create a namespace loop.
+fn is_mnt_ns_loop(dentry: &Dentry, current_mnt_ns: &Arc<MountNamespace>) -> bool {
+    let inode = dentry.inode().as_ref();
+    let Some(mnt_ns_inode) = inode.downcast_ref::<NsInode<MountNamespace>>() else {
+        return false;
+    };
+
+    current_mnt_ns.as_ref() >= mnt_ns_inode.ns().as_ref()
+}
+
+/// Ensures that a mount subtree contains no mount-namespace loop.
+fn check_no_mnt_ns_loop_in_tree(
+    root_mount: &Arc<Mount>,
+    current_mnt_ns: &Arc<MountNamespace>,
+) -> Result<()> {
+    let mut worklist = VecDeque::new();
+    worklist.push_back(root_mount.clone());
+
+    let mut checked_root_dentries = BTreeSet::new();
+
+    while let Some(mount) = worklist.pop_front() {
+        let root_dentry = mount.root_dentry();
+        if checked_root_dentries.insert(root_dentry.key())
+            && is_mnt_ns_loop(root_dentry, current_mnt_ns)
+        {
+            return_errno_with_message!(
+                Errno::ELOOP,
+                "the mount tree contains a mount namespace file that would create a namespace loop"
+            );
+        }
+        let children = mount.children.read();
+        worklist.extend(children.values().cloned());
+    }
+
+    Ok(())
+}
+
 impl Path {
     /// Mounts a filesystem at the current path.
     ///
@@ -353,9 +395,12 @@ impl Path {
     ///
     /// # Errors
     ///
-    /// Returns `ENOTDIR` if the `dst_path` is not a directory.
-    /// Returns `EINVAL` if either source or destination path is not in the
-    /// current mount namespace.
+    /// Returns `ENOTDIR` if one of the source and destination is a directory
+    /// and the other is not.
+    ///
+    /// Returns `EINVAL` if any of the following holds:
+    /// - The destination path is not in the current mount namespace.
+    /// - The source path is a mount namespace file that would create a namespace loop.
     pub fn bind_mount_to(&self, dst_path: &Self, recursive: bool, ctx: &Context) -> Result<()> {
         let can_bind = {
             let src_is_dir = self.type_() == InodeType::Dir;
@@ -372,27 +417,29 @@ impl Path {
         let current_ns_proxy = ctx.thread_local.borrow_ns_proxy();
         let current_mnt_ns = current_ns_proxy.unwrap().mnt_ns();
 
-        // Linux only checks whether the destination path belongs to the current mount namespace;
-        // it does not validate the source path.
-        // See <https://elixir.bootlin.com/linux/v6.19/source/fs/namespace.c#L2991>.
+        // Linux does not require the source path to belong to the current
+        // mount namespace, but still rejects source mount namespace files that
+        // would form loops.
         if !current_mnt_ns.owns(&dst_path.mount) {
             return_errno_with_message!(
                 Errno::EINVAL,
                 "the destination path is not in this mount namespace"
             );
         }
-
-        if dst_path
-            .mount_node()
-            .is_equal_or_descendant_of(self.mount_node())
-        {
+        if is_mnt_ns_loop(&self.dentry, current_mnt_ns) {
             return_errno_with_message!(
-                Errno::ELOOP,
-                "the destination path is inside the mount subtree"
+                Errno::EINVAL,
+                "the source is a mount namespace file that would create a namespace loop"
             );
         }
 
-        let new_mount = self.mount.clone_mount_tree(&self.dentry, None, recursive);
+        let current_mnt_ns_weak = Arc::downgrade(current_mnt_ns);
+        let new_mount = self.mount.clone_mount_tree(
+            &self.dentry,
+            &current_mnt_ns_weak,
+            recursive,
+            MountNsFileCopying::Copy,
+        );
         new_mount.graft_mount_tree(dst_path);
         Ok(())
     }
@@ -402,14 +449,15 @@ impl Path {
     /// # Errors
     ///
     /// Returns `ENOTDIR` if the `dst_path` is not a directory.
+    ///
     /// Returns `EINVAL` in the following cases:
     /// - The current path is not a mount root.
     /// - The mount of the current path is the root mount.
     /// - Either source or destination path is not in the current mount namespace.
-    /// - The mount tree contains a mount namespace file that would create a namespace loop.
     ///
-    /// Returns `ELOOP` if moving the mount tree would create a mount loop, for
-    /// example, when the destination path is inside the subtree being moved.
+    /// Returns `ELOOP` in the following cases:
+    /// - The destination path is inside the subtree being moved.
+    /// - The mount tree contains a mount namespace file that would create a namespace loop.
     pub fn move_mount_to(&self, dst_path: &Self, ctx: &Context) -> Result<()> {
         if !self.is_mount_root() {
             return_errno_with_message!(Errno::EINVAL, "the path is not a mount root");
@@ -432,6 +480,7 @@ impl Path {
                 "the destination path is not in this mount namespace"
             );
         }
+        check_no_mnt_ns_loop_in_tree(self.mount_node(), current_mnt_ns)?;
         if dst_path
             .mount_node()
             .is_equal_or_descendant_of(self.mount_node())
