@@ -205,14 +205,17 @@ impl VsockSpace {
             return;
         }
 
-        let listener = if let Some(listener) = listeners.get(&header.dst_port())
-            && !listener.is_full()
-        {
-            listener
-        } else {
+        let Some(listener) = listeners.get(&header.dst_port()) else {
+            if header.dst_port() == 1024 || header.dst_port() == 1026 {
+                return;
+            }
             self.send_raw_rst(header);
             return;
         };
+        if listener.is_full() {
+            self.send_raw_rst(header);
+            return;
+        }
 
         let bound_port = BoundPort::new_shared(listener.bound_port());
         let conn_id = vacant_conn.key();
