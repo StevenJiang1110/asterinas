@@ -162,7 +162,8 @@ pub fn init_in_first_kthread(path_resolver: &PathResolver) -> Result<()> {
     let reader = match &initramfs_buf[..4] {
         &[0x1F, 0x8B, _, _] => {
             let decoder_options = DeflateOptions::default()
-                .set_size_hint(estimate_gzip_uncompressed_size(initramfs_buf));
+                .set_size_hint(estimate_gzip_uncompressed_size(initramfs_buf))
+                .set_confirm_checksum(false);
             let mut gzip_decoder = DeflateDecoder::new_with_options(initramfs_buf, decoder_options);
             let decompressed = gzip_decoder.decode_gzip().map_err(|_| {
                 Error::with_message(Errno::EINVAL, "failed to decompress initramfs")
