@@ -191,6 +191,7 @@ log = "0.4"
 rand = { version = "0.9.2", default-features = false }
 spin = "0.9.4"
 xmas-elf = "0.10.0"
+zune-inflate = { version = "0.2.54", default-features = false, features = ["gzip"] }
 # Note: when updating the zerocopy version, 
 # also update it in `ostd/libs/ostd-pod/README.md`.
 zerocopy = { version = "0.8.34", features = [ "derive" ] }

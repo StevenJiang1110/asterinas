@@ -233,6 +233,7 @@ dependencies = [
  "xarray",
  "xmas-elf",
  "zerocopy",
+ "zune-inflate",
 ]
 
 [[package]]
@@ -2211,3 +2212,9 @@ dependencies = [
  "quote",
  "syn 2.0.101",
 ]
+
+[[package]]
+name = "zune-inflate"
+version = "0.2.54"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73ab332fe2f6680068f3582b16a24f90ad7096d5d39b974d1c0aff0125116f02"

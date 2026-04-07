@@ -127,8 +127,8 @@ where
             let data_padding_len = {
                 let header_padding_len = align_up_pad(header.len() + name.len() + 1, 4);
                 if header_padding_len > 0 {
-                    let mut pad_buf = vec![0u8; header_padding_len];
-                    reader.read_exact(&mut pad_buf)?;
+                    let mut pad_buf = [0u8; 4];
+                    reader.read_exact(&mut pad_buf[..header_padding_len])?;
                 }
                 align_up_pad(metadata.size() as usize, 4)
             };
@@ -158,9 +158,11 @@ where
     where
         W: Write,
     {
+        const COPY_BUFFER_LEN: usize = 64 * 1024;
+
         let data_len = self.metadata().size() as usize;
         let mut send_len = 0;
-        let mut buffer = vec![0u8; 0x1000];
+        let mut buffer = vec![0u8; COPY_BUFFER_LEN.min(data_len.max(self.data_padding_len))];
         while send_len < data_len {
             let len = min(buffer.len(), data_len - send_len);
             self.reader.read_exact(&mut buffer[..len])?;
