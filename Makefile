@@ -20,6 +20,7 @@ OSTD_TASK_STACK_SIZE_IN_PAGES ?= 64
 FEATURES ?=
 NO_DEFAULT_FEATURES ?= 0
 COVERAGE ?= 0
+INITRAMFS_SKIP_GZIP ?= 1
 
 # Specify the primary system console (supported: tty0, ttyS0, hvc0).
 # - tty0: The active virtual terminal (VT).

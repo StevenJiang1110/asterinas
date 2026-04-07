@@ -20,10 +20,7 @@
 
 extern crate alloc;
 
-use alloc::{
-    string::{String, ToString},
-    vec,
-};
+use alloc::{string::String, vec};
 use core::cmp::min;
 
 use core2::io::{Read, Write};
@@ -112,12 +109,13 @@ where
         let (metadata, name, data_padding_len) = {
             let header = Header::new(reader)?;
             let name = {
-                let name_size = read_hex_bytes_to_u32(&header.name_size)? as usize;
+                let name_size = header.name_size()? as usize;
                 let mut name_bytes = vec![0u8; name_size];
                 reader.read_exact(&mut name_bytes)?;
-                let name = core::ffi::CStr::from_bytes_with_nul(&name_bytes)
-                    .map_err(|_| Error::FileNameError)?;
-                name.to_str().map_err(|_| Error::Utf8Error)?.to_string()
+                if name_bytes.pop() != Some(0) {
+                    return Err(Error::FileNameError);
+                }
+                String::from_utf8(name_bytes).map_err(|_| Error::Utf8Error)?
             };
             let metadata = if name == TRAILER_NAME {
                 Default::default()
@@ -202,20 +200,20 @@ impl FileMetadata {
     fn new(header: &Header) -> Result<Self> {
         const MODE_MASK: u32 = 0o7777;
         const TYPE_MASK: u32 = 0o170000;
-        let raw_mode = read_hex_bytes_to_u32(&header.mode)?;
+        let raw_mode = header.mode()?;
         let metadata = Self {
-            ino: read_hex_bytes_to_u32(&header.ino)?,
+            ino: header.ino()?,
             type_: FileType::try_from(raw_mode & TYPE_MASK).map_err(|_| Error::FileTypeError)?,
             mode: (raw_mode & MODE_MASK) as u16,
-            uid: read_hex_bytes_to_u32(&header.uid)?,
-            gid: read_hex_bytes_to_u32(&header.gid)?,
-            nlink: read_hex_bytes_to_u32(&header.nlink)?,
-            mtime: read_hex_bytes_to_u32(&header.mtime)?,
-            size: read_hex_bytes_to_u32(&header.file_size)?,
-            dev_maj: read_hex_bytes_to_u32(&header.dev_maj)?,
-            dev_min: read_hex_bytes_to_u32(&header.dev_min)?,
-            rdev_maj: read_hex_bytes_to_u32(&header.rdev_maj)?,
-            rdev_min: read_hex_bytes_to_u32(&header.rdev_min)?,
+            uid: header.uid()?,
+            gid: header.gid()?,
+            nlink: header.nlink()?,
+            mtime: header.mtime()?,
+            size: header.file_size()?,
+            dev_maj: header.dev_maj()?,
+            dev_min: header.dev_min()?,
+            rdev_maj: header.rdev_maj()?,
+            rdev_min: header.rdev_min()?,
         };
         Ok(metadata)
     }
@@ -306,61 +304,92 @@ const MAGIC: &[u8] = b"070701";
 const TRAILER_NAME: &str = "TRAILER!!!";
 
 struct Header {
-    magic: [u8; 6],
-    ino: [u8; 8],
-    mode: [u8; 8],
-    uid: [u8; 8],
-    gid: [u8; 8],
-    nlink: [u8; 8],
-    mtime: [u8; 8],
-    file_size: [u8; 8],
-    dev_maj: [u8; 8],
-    dev_min: [u8; 8],
-    rdev_maj: [u8; 8],
-    rdev_min: [u8; 8],
-    name_size: [u8; 8],
-    _chksum: [u8; 8],
+    buf: [u8; HEADER_LEN],
 }
+
+const HEADER_LEN: usize = 110;
 
 impl Header {
     pub fn new<R>(reader: &mut R) -> Result<Self>
     where
         R: Read,
     {
-        let mut buf = vec![0u8; size_of::<Self>()];
+        let mut buf = [0u8; HEADER_LEN];
         reader.read_exact(&mut buf)?;
 
-        let header = Self {
-            magic: <[u8; 6]>::try_from(&buf[0..6]).unwrap(),
-            ino: <[u8; 8]>::try_from(&buf[6..14]).unwrap(),
-            mode: <[u8; 8]>::try_from(&buf[14..22]).unwrap(),
-            uid: <[u8; 8]>::try_from(&buf[22..30]).unwrap(),
-            gid: <[u8; 8]>::try_from(&buf[30..38]).unwrap(),
-            nlink: <[u8; 8]>::try_from(&buf[38..46]).unwrap(),
-            mtime: <[u8; 8]>::try_from(&buf[46..54]).unwrap(),
-            file_size: <[u8; 8]>::try_from(&buf[54..62]).unwrap(),
-            dev_maj: <[u8; 8]>::try_from(&buf[62..70]).unwrap(),
-            dev_min: <[u8; 8]>::try_from(&buf[70..78]).unwrap(),
-            rdev_maj: <[u8; 8]>::try_from(&buf[78..86]).unwrap(),
-            rdev_min: <[u8; 8]>::try_from(&buf[86..94]).unwrap(),
-            name_size: <[u8; 8]>::try_from(&buf[94..102]).unwrap(),
-            _chksum: <[u8; 8]>::try_from(&buf[102..110]).unwrap(),
-        };
-        if header.magic != MAGIC {
+        if &buf[0..6] != MAGIC {
             return Err(Error::MagicError);
         }
-        Ok(header)
+        Ok(Self { buf })
     }
 
     fn len(&self) -> usize {
-        size_of::<Self>()
+        HEADER_LEN
+    }
+
+    fn ino(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[6..14])
+    }
+
+    fn mode(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[14..22])
+    }
+
+    fn uid(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[22..30])
+    }
+
+    fn gid(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[30..38])
+    }
+
+    fn nlink(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[38..46])
+    }
+
+    fn mtime(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[46..54])
+    }
+
+    fn file_size(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[54..62])
+    }
+
+    fn dev_maj(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[62..70])
+    }
+
+    fn dev_min(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[70..78])
+    }
+
+    fn rdev_maj(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[78..86])
+    }
+
+    fn rdev_min(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[86..94])
+    }
+
+    fn name_size(&self) -> Result<u32> {
+        read_hex_bytes_to_u32(&self.buf[94..102])
     }
 }
 
 fn read_hex_bytes_to_u32(bytes: &[u8]) -> Result<u32> {
     debug_assert!(bytes.len() == 8);
-    let string = core::str::from_utf8(bytes).map_err(|_| Error::Utf8Error)?;
-    let num = u32::from_str_radix(string, 16).map_err(|_| Error::ParseIntError)?;
+
+    let mut num = 0u32;
+    for &byte in bytes {
+        let digit = match byte {
+            b'0'..=b'9' => (byte - b'0') as u32,
+            b'a'..=b'f' => (byte - b'a' + 10) as u32,
+            b'A'..=b'F' => (byte - b'A' + 10) as u32,
+            _ => return Err(Error::ParseIntError),
+        };
+        num = (num << 4) | digit;
+    }
+
     Ok(num)
 }
 
