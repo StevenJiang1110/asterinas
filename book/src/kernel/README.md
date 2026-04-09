@@ -78,7 +78,7 @@ since `distro/README.md` references them -->
     ```bash
     docker run -it --privileged \
                 --network=host \
-                -v /dev:/dev \
+                --device=/dev/kvm --device=/dev/loop-control \
                 -v $(pwd)/asterinas:/root/asterinas \
                 asterinas/asterinas:0.17.1-20260319
     ```

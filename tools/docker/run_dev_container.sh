@@ -10,4 +10,4 @@ CARGO_TOML_PATH=${SCRIPT_DIR}/../../Cargo.toml
 VERSION=$( cat ${ASTER_SRC_DIR}/VERSION )
 IMAGE_NAME="asterinas/asterinas:${VERSION}"
 
-docker run -it --privileged --network=host -v /dev:/dev -v ${ASTER_SRC_DIR}:/root/asterinas ${IMAGE_NAME}
+docker run -it --privileged --network=host --device=/dev/kvm --device=/dev/loop-control -v ${ASTER_SRC_DIR}:/root/asterinas ${IMAGE_NAME}

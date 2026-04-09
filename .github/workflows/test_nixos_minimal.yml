@@ -37,7 +37,7 @@ jobs:
         uses: maus007/docker-run-action-fork@v1
         with:
           image: asterinas/asterinas:0.17.1-20260319
-          options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
+          options: --privileged --device=/dev/kvm --device=/dev/loop-control -v ${{ github.workspace }}:/root/asterinas
           run: |
             make nixos NIXOS_TEST_SUITE=hello NIXOS_DISK_SIZE_IN_MB=6144
             make run_nixos NIXOS_TEST_SUITE=hello
