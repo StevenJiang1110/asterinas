@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-4-cores-150GB-ssd
     container:
       image: asterinas/asterinas:0.17.1-20260319
-      options: --device=/dev/kvm --device=/dev/loop-control --privileged
+      options: --device=/dev/kvm --device=/dev/loop-control --cgroupns host --privileged
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

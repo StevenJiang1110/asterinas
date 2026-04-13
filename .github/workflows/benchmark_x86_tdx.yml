@@ -109,7 +109,7 @@ jobs:
     timeout-minutes: 60
     container: 
       image: asterinas/asterinas:0.17.1-20260319
-      options: --device=/dev/kvm --device=/dev/loop-control --privileged
+      options: --device=/dev/kvm --device=/dev/loop-control --cgroupns host --privileged
 
     steps:
       - uses: actions/checkout@v4
@@ -133,4 +133,3 @@ jobs:
           task: result
           platform: tdx
           benchmark-secret: ${{ secrets.BENCHMARK_SECRET }}
-         
