@@ -135,6 +135,10 @@ As of April 10, 2026:
 
 - Added `make kata`
 - Added `tools/kata/run_kata_alpine.sh`
+- Local `make kata` now uses `virtio-fs`
+- Local Kata config now sets `file_mem_backend = "/tmp"` to avoid the default
+  `virtio-fs` shared guest memory backend path (`/dev/shm`), which was only
+  `64M` in this dev container
 - Local install now reuses the official
   `quay.io/kata-containers/kata-deploy:${KATA_VERSION}` payload image
 - Local smoke test now pulls Alpine from `quay.io/libpod/alpine:latest`
@@ -147,7 +151,11 @@ As of April 10, 2026:
 ### Local Verification Result
 
 On April 10, 2026, after restarting the dev container with `--cgroupns=host`,
-the local flow was re-verified successfully:
+the local flow was re-verified successfully.
+
+On April 14, 2026, the local flow was re-verified again after switching the
+repo-owned Kata drop-in from `virtio-9p` to `virtio-fs` and explicitly setting
+`file_mem_backend = "/tmp"`:
 
 - Kata install works
 - inner `containerd` starts
@@ -158,6 +166,7 @@ the local flow was re-verified successfully:
 - `nerdctl run --runtime io.containerd.kata.v2 ...` succeeds
 - `make kata` succeeds
 - `KATA_PASSES=2 make kata` succeeds
+- `kata-runtime env` reports `SharedFS = "virtio-fs"`
 - repeated `make kata` runs stay quiet and do not re-run package refresh by
   default
 
@@ -165,6 +174,11 @@ the local flow was re-verified successfully:
 
 The earlier local cgroup failure was caused by the outer dev container
 environment, not by the repo helper scripts.
+
+The later local `virtio-fs` failure was caused by the dev container's default
+`/dev/shm` size, not by Kata's `virtio-fs` support itself. The repo-side fix is
+to keep `virtio-fs` enabled and point `file_mem_backend` at a directory with
+enough space.
 
 With the dev container started using `--privileged --cgroupns=host`, the
 current repo-side Kata workflow and local scripts both work.
@@ -176,6 +190,10 @@ still includes the same cgroup setup used by the GitHub Actions job:
 
 - `--privileged`
 - `--cgroupns=host`
+
+Then verify that the `virtio-fs` guest memory backing directory has enough
+space. In this environment, `/dev/shm` was only `64M`, so the local drop-in
+uses `file_mem_backend = "/tmp"` instead.
 
 The current repo-side handoff point is:
 

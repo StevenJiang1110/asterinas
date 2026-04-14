@@ -1,6 +1,7 @@
 [hypervisor.qemu]
 enable_debug = true
-shared_fs = "virtio-9p"
+shared_fs = "virtio-fs"
+file_mem_backend = "/tmp"
 
 [agent.kata]
 enable_debug = true

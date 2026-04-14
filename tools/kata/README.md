@@ -10,3 +10,14 @@ Kata helpers live here.
 - `stop_kata_services.sh`: stops the background services started by the Kata helpers
 - `check_kvm_create_vm.py`: probes `KVM_CREATE_VM` directly for diagnostics
 - `config/`: repo-owned Kata, CNI, and `containerd` config templates used by the scripts
+
+## Local virtio-fs note
+
+- The local `make kata` flow now uses `virtio-fs`.
+- In the current dev container, `/dev/shm` is only `64M`, which is too small
+  for Kata's default shared guest memory backend when the VM memory is `2048M`.
+- The repo-owned Kata drop-in therefore sets `file_mem_backend = "/tmp"` so
+  `virtio-fs` local runs do not fail during early VM boot.
+- If local `virtio-fs` bring-up fails again, check both:
+  - the outer container flags (`--privileged --cgroupns=host`)
+  - the available space of the configured file-backed memory directory
