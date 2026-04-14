@@ -82,6 +82,65 @@ fi
 
 BUILD_DIR=$(mktemp -d -p /mnt)
 
+partition_sysfs_path() {
+    printf '/sys/class/block/%s/dev' "$(basename "$1")"
+}
+
+partition_exists() {
+    [ -b "$1" ] || [ -e "$(partition_sysfs_path "$1")" ]
+}
+
+ensure_partition_device_node() {
+    partition_path="$1"
+    sysfs_dev_path=$(partition_sysfs_path "$partition_path")
+
+    if [ -b "$partition_path" ]; then
+        return 0
+    fi
+
+    if [ ! -e "$sysfs_dev_path" ]; then
+        return 1
+    fi
+
+    device_numbers=$(cat "$sysfs_dev_path")
+    major_number=${device_numbers%%:*}
+    minor_number=${device_numbers##*:}
+    mknod "$partition_path" b "$major_number" "$minor_number"
+}
+
+refresh_partition_table() {
+    partprobe "$DISK" >/dev/null 2>&1 || true
+
+    if command -v partx >/dev/null 2>&1; then
+        partx -u "$DISK" >/dev/null 2>&1 || true
+    fi
+}
+
+ensure_partition_devices() {
+    for _ in $(seq 1 10); do
+        refresh_partition_table
+
+        boot_ready=false
+        root_ready=false
+
+        if ensure_partition_device_node "$BOOT_DEVICE"; then
+            boot_ready=true
+        fi
+        if ensure_partition_device_node "$ROOT_DEVICE"; then
+            root_ready=true
+        fi
+
+        if [ "$boot_ready" = true ] && [ "$root_ready" = true ]; then
+            return 0
+        fi
+
+        sleep 1
+    done
+
+    echo "Error: cannot access partition devices ${BOOT_DEVICE} and ${ROOT_DEVICE}." >&2
+    return 1
+}
+
 if [ "${DISK#/dev/loop}" != "$DISK" ]; then
     BOOT_DEVICE="${DISK}p1"
     ROOT_DEVICE="${DISK}p2"
@@ -89,17 +148,20 @@ else
     BOOT_DEVICE="${DISK}1"
     ROOT_DEVICE="${DISK}2"
 fi
-if [ ! -b "${BOOT_DEVICE}" ] && [ ! -b "${ROOT_DEVICE}" ]; then
+if ! partition_exists "${BOOT_DEVICE}" && ! partition_exists "${ROOT_DEVICE}"; then
     parted ${DISK} -- mklabel gpt
     parted ${DISK} -- mkpart ESP fat32 1MB 512MB
     parted ${DISK} -- mkpart root ext2 512MB 100%
     parted ${DISK} -- set 1 esp on
     echo "partition finished"
 
+    ensure_partition_devices
+
     mkfs.fat -F 32 -n boot "${BOOT_DEVICE}"
     mkfs.ext2 -L nixos "${ROOT_DEVICE}"
     echo "mkfs finished"
 else
+    ensure_partition_devices
     echo "Partitions ${BOOT_DEVICE} and ${ROOT_DEVICE} already exist — skipping partitioning and mkfs"
 fi
 
