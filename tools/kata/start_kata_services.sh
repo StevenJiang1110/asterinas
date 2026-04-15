@@ -33,6 +33,45 @@ select_kata_config_source() {
   echo /opt/kata/share/defaults/kata-containers/configuration-qemu.toml
 }
 
+select_qemu_binary_path() {
+  qemu_candidates=(
+    /opt/kata/bin/qemu-system-x86_64
+    /usr/local/qemu/bin/qemu-system-x86_64
+    /usr/bin/qemu-system-x86_64
+    /usr/bin/qemu-kvm
+    /usr/libexec/qemu-kvm
+    /usr/lib/qemu/qemu-system-x86_64
+  )
+
+  if command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    command -v qemu-system-x86_64
+    return 0
+  fi
+
+  for qemu_candidate in "${qemu_candidates[@]}"; do
+    if [ -x "${qemu_candidate}" ]; then
+      printf '%s\n' "${qemu_candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+normalize_qemu_config_path() {
+  kata_config_path="$1"
+
+  if ! qemu_binary_path="$(select_qemu_binary_path)"; then
+    echo "Cannot find a usable QEMU binary for Kata." >&2
+    return 1
+  fi
+
+  sed -i \
+    -e 's#^\(path = \)".*"#\1"'"${qemu_binary_path}"'"#' \
+    -e 's#^\(valid_hypervisor_paths = \)\[.*\]#\1["'"${qemu_binary_path}"'"]#' \
+    "${kata_config_path}"
+}
+
 install_repo_configs() {
   : "${PAUSE_IMAGE:?PAUSE_IMAGE must be set}"
 
@@ -42,6 +81,7 @@ install_repo_configs() {
   # Start from Kata's upstream base config, then layer the repo-owned drop-in.
   install -d -m 0755 /etc/kata-containers /etc/kata-containers/config.d
   install -m 0644 "${kata_config_source}" /etc/kata-containers/configuration.toml
+  normalize_qemu_config_path /etc/kata-containers/configuration.toml
   install -m 0644 "${config_dir}/kata-10-container.toml" /etc/kata-containers/config.d/10-container.toml
 
   # Materialize the CNI and `containerd` configs that the nested stack expects.
