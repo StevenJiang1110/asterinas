@@ -14,10 +14,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "adler32"
-version = "1.2.0"
+name = "adler2"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aae1277d39aeec15cb388266ecc24b11c80469deae6067e17a1a7aa9e5c1f234"
+checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "aead"
@@ -118,6 +118,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aster-compression"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "miniz_oxide 0.9.1",
+]
+
+[[package]]
 name = "aster-console"
 version = "0.1.0"
 dependencies = [
@@ -173,6 +182,7 @@ dependencies = [
  "aster-bigtcp",
  "aster-block",
  "aster-cmdline",
+ "aster-compression",
  "aster-console",
  "aster-framebuffer",
  "aster-i8042",
@@ -195,7 +205,6 @@ dependencies = [
  "component",
  "const_format",
  "controlled",
- "core2",
  "cpio-decoder",
  "device-id",
  "getset",
@@ -207,10 +216,10 @@ dependencies = [
  "jhash",
  "keyable-arc",
  "lending-iterator",
- "libflate",
  "logo-ascii-art",
  "loongArch64",
  "lru",
+ "no_std_io2",
  "osdk-frame-allocator",
  "osdk-heap-allocator",
  "ostd",
@@ -551,21 +560,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "core2"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b49ba7ef1ad6107f8824dbe97de947cbaac53c44e7f9756a1fba0d37c1eec505"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "cpio-decoder"
 version = "0.1.0"
 dependencies = [
- "core2",
  "int-to-c-enum",
  "lending-iterator",
+ "no_std_io2",
 ]
 
 [[package]]
@@ -579,9 +579,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
 ]
@@ -644,12 +644,6 @@ dependencies = [
  "quote",
  "syn 1.0.109",
 ]
-
-[[package]]
-name = "dary_heap"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04d2cd9c18b9f454ed67da600630b021a8a80bf33f8c95896ab33aaf1c26b728"
 
 [[package]]
 name = "defmt"
@@ -761,6 +755,16 @@ name = "fdt"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "784a4df722dc6267a04af36895398f59d21d07dce47232adf31ec0ff2fa45e67"
+
+[[package]]
+name = "flate2"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
+dependencies = [
+ "crc32fast",
+ "miniz_oxide 0.8.9",
+]
 
 [[package]]
 name = "fnv"
@@ -1064,30 +1068,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d750af042f7ef4f724306de029d18836c26c1765a54a6a3f094cbd23a7267ffa"
 
 [[package]]
-name = "libflate"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45d9dfdc14ea4ef0900c1cddbc8dcd553fbaacd8a4a282cf4018ae9dd04fb21e"
-dependencies = [
- "adler32",
- "core2",
- "crc32fast",
- "dary_heap",
- "libflate_lz77",
-]
-
-[[package]]
-name = "libflate_lz77"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6e0d73b369f386f1c44abd9c570d5318f55ccde816ff4b562fa452e5182863d"
-dependencies = [
- "core2",
- "hashbrown 0.14.5",
- "rle-decode-fast",
-]
-
-[[package]]
 name = "linux-boot-params"
 version = "0.17.1"
 
@@ -1097,7 +1077,7 @@ version = "0.17.1"
 dependencies = [
  "align_ext",
  "bitflags 1.3.2",
- "libflate",
+ "flate2",
  "ostd-pod",
  "serde",
  "xmas-elf",
@@ -1108,9 +1088,8 @@ dependencies = [
 name = "linux-bzimage-setup"
 version = "0.17.1"
 dependencies = [
+ "aster-compression",
  "cfg-if",
- "core2",
- "libflate",
  "linux-boot-params",
  "log",
  "tdx-guest",
@@ -1210,6 +1189,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "miniz_oxide"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
+dependencies = [
+ "adler2",
+ "simd-adler32",
+]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
+dependencies = [
+ "adler2",
+]
+
+[[package]]
 name = "multiboot2"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1238,6 +1236,15 @@ name = "never-say-never"
 version = "6.6.666"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf5a574dadd7941adeaa71823ecba5e28331b8313fb2e1c6a5c7e5981ea53ad6"
+
+[[package]]
+name = "no_std_io2"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b51ed7824b6e07d354605f4abb3d9d300350701299da96642ee084f5ce631550"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "nougat"
@@ -1616,12 +1623,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8188909339ccc0c68cfb5a04648313f09621e8b87dc03095454f1a11f6c5d436"
 
 [[package]]
-name = "rle-decode-fast"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3582f63211428f83597b51b2ddb88e2a91a9d52d12831f9d08f5e624e8977422"
-
-[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1706,6 +1707,12 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+[[package]]
+name = "simd-adler32"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
 
 [[package]]
 name = "smallvec"

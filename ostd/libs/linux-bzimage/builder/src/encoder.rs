@@ -8,7 +8,10 @@ use std::{
     str::FromStr,
 };
 
-use libflate::{gzip, zlib};
+use flate2::{
+    Compression,
+    write::{GzEncoder, ZlibEncoder},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -52,14 +55,14 @@ pub fn encode_kernel(kernel: Vec<u8>, encoding: PayloadEncoding) -> Vec<u8> {
     match encoding {
         PayloadEncoding::Raw => kernel,
         PayloadEncoding::Gzip => {
-            let mut encoder = gzip::Encoder::new(Vec::new()).unwrap();
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
             encoder.write_all(&kernel).unwrap();
-            encoder.finish().into_result().unwrap()
+            encoder.finish().unwrap()
         }
         PayloadEncoding::Zlib => {
-            let mut encoder = zlib::Encoder::new(Vec::new()).unwrap();
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
             encoder.write_all(&kernel).unwrap();
-            encoder.finish().into_result().unwrap()
+            encoder.finish().unwrap()
         }
     }
 }
