@@ -146,6 +146,9 @@ fn first_kthread() {
 }
 
 static INIT_PROCESS: Once<Arc<Process>> = Once::new();
+// The init process may create extra threads very early, but the process-stage
+// kernel initialization must run only once for the whole boot.
+static FIRST_PROCESS_STARTUP: Once<()> = Once::new();
 
 fn init_in_first_kthread(path_resolver: &PathResolver) {
     component::init_all(InitStage::Kthread, component::parse_metadata!()).unwrap();
@@ -165,9 +168,11 @@ fn print_banner() {
 }
 
 pub(crate) fn on_first_process_startup(ctx: &Context) {
-    component::init_all(InitStage::Process, component::parse_metadata!()).unwrap();
-    crate::device::init_in_first_process(ctx).unwrap();
-    crate::fs::init_in_first_process(ctx);
+    FIRST_PROCESS_STARTUP.call_once(|| {
+        component::init_all(InitStage::Process, component::parse_metadata!()).unwrap();
+        crate::device::init_in_first_process(ctx).unwrap();
+        crate::fs::init_in_first_process(ctx);
+    });
 }
 
 static INIT_PATH: Once<String> = Once::new();
