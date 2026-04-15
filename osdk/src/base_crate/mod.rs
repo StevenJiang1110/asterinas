@@ -310,6 +310,14 @@ fn copy_profile_configurations(workspace_root: impl AsRef<Path>) {
         );
     }
 
+    let patch = target_manifest.get("patch");
+    if let Some(patch) = patch {
+        manifest.insert(
+            "patch".to_string(),
+            toml::Value::Table(patch.as_table().unwrap().clone()),
+        );
+    }
+
     let content = toml::to_string(&manifest).unwrap();
     fs::write(manifest_path, content).unwrap();
 }
