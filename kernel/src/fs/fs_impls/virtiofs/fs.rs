@@ -17,12 +17,10 @@ use device_id::DeviceId;
 
 use self::inode::VirtioFsInode;
 use crate::{
-    fs::{
-        vfs::{
-            file_system::{FileSystem, FsEventSubscriberStats, SuperBlock},
-            inode::{Inode, Metadata},
-            registry::{FsCreationCtx, FsProperties, FsType},
-        },
+    fs::vfs::{
+        file_system::{FileSystem, FsEventSubscriberStats, SuperBlock},
+        inode::{Inode, Metadata},
+        registry::{FsCreationCtx, FsProperties, FsType},
     },
     prelude::*,
     time::clocks::MonotonicCoarseClock,
@@ -56,10 +54,12 @@ impl FsType for VirtioFsType {
                 .to_str()
                 .map_err(|_| Error::with_message(Errno::EINVAL, "invalid virtiofs tag"))?
                 .to_string(),
-            _ => fs_creation_ctx.source().ok_or_else(|| {
-                Error::with_message(Errno::EINVAL, "virtiofs source(tag) is required")
-            })?
-            .to_string(),
+            _ => fs_creation_ctx
+                .source()
+                .ok_or_else(|| {
+                    Error::with_message(Errno::EINVAL, "virtiofs source(tag) is required")
+                })?
+                .to_string(),
         };
 
         new(&tag)

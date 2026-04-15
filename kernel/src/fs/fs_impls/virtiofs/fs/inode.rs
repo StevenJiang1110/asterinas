@@ -33,9 +33,8 @@ use crate::{
         utils::DirentVisitor,
         vfs::{
             file_system::FileSystem,
-            inode::{Extension, Inode, InodeIo, Metadata, SymbolicLink},
+            inode::{Extension, Inode, InodeIo, Metadata, RevalidationPolicy, SymbolicLink},
             page_cache::{CachePage, PageCache, PageCacheBackend},
-            path::Dentry,
         },
     },
     prelude::*,
@@ -257,7 +256,7 @@ impl VirtioFsInode {
                 let fh = fh_out.fh;
                 let result = fs
                     .device
-                    .fuse_read(self.nodeid(), fh, start as u64, max_len as u32);
+                    .fuse_read(self.nodeid(), fh, start as u64, max_len);
                 let _ = fs.device.fuse_release(self.nodeid(), fh, O_RDONLY);
                 result
             })
@@ -487,6 +486,22 @@ impl Inode for VirtioFsInode {
 
     fn metadata(&self) -> Metadata {
         *self.metadata.read()
+    }
+
+    fn revalidation_policy(&self) -> RevalidationPolicy {
+        if self.metadata.read().type_ == InodeType::Dir {
+            RevalidationPolicy::REVALIDATE_EXISTS
+        } else {
+            RevalidationPolicy::empty()
+        }
+    }
+
+    fn revalidate_exists(&self, name: &str, child: &dyn Inode) -> bool {
+        let Some(child) = child.downcast_ref::<VirtioFsInode>() else {
+            return false;
+        };
+
+        child.revalidate_lookup(self.nodeid(), name).is_ok()
     }
 
     fn ino(&self) -> u64 {
@@ -786,8 +801,7 @@ impl Inode for VirtioFsInode {
             .map_err(|_| Error::with_message(Errno::EIO, "virtiofs readdir failed"))?;
 
         let mut current_off = offset;
-        let mut visited = 0usize;
-        for entry in &entries {
+        for (visited, entry) in entries.iter().enumerate() {
             let next_off = entry.offset as usize;
             if let Err(err) = visitor.visit(
                 entry.name.as_str(),
@@ -801,7 +815,6 @@ impl Inode for VirtioFsInode {
                 break;
             }
             current_off = next_off;
-            visited += 1;
         }
 
         let delta = current_off.saturating_sub(offset);
@@ -829,14 +842,6 @@ impl Inode for VirtioFsInode {
             .map_err(Error::from)?;
 
         Ok(SymbolicLink::Plain(target))
-    }
-
-    fn revalidate_child(&self, name: &str, child: &Dentry) -> Result<()> {
-        let Some(parent) = child.parent() else {
-            return Ok(());
-        };
-
-        self.revalidate_lookup(parent.inode().ino(), name)
     }
 
     fn extension(&self) -> &Extension {

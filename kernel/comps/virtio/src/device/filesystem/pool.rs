@@ -56,7 +56,7 @@ impl FsDmaPools {
                 .to_device_pools
                 .disable_irq()
                 .lock()
-                .get(&class_size)
+                .get(class_size)
                 .unwrap()
                 .clone();
             FsDmaStorage::ToSegment(pool.alloc_segment().unwrap())
@@ -82,7 +82,7 @@ impl FsDmaPools {
                 .from_device_pools
                 .disable_irq()
                 .lock()
-                .get(&class_size)
+                .get(class_size)
                 .unwrap()
                 .clone();
             FsDmaStorage::FromSegment(pool.alloc_segment().unwrap())

@@ -67,13 +67,12 @@ impl MountNamespace {
         let owner = UserNamespace::get_init_singleton().clone();
 
         INIT.call_once(|| {
-            let rootfs: Arc<dyn FileSystem> = if let Some(virtiofs_tag) =
-                get_virtiofs_tag_from_cmdline()
-            {
-                virtiofs::new(virtiofs_tag).unwrap()
-            } else {
-                RamFs::new_rootfs()
-            };
+            let rootfs: Arc<dyn FileSystem> =
+                if let Some(virtiofs_tag) = get_virtiofs_tag_from_cmdline() {
+                    virtiofs::new(&virtiofs_tag).unwrap()
+                } else {
+                    RamFs::new_rootfs()
+                };
 
             Arc::new_cyclic(|weak_self| {
                 let root = Mount::new_root(rootfs, weak_self.clone());
@@ -239,15 +238,15 @@ fn get_virtiofs_tag_from_cmdline() -> Option<String> {
     let cmdline = boot_info().kernel_cmdline.as_str();
 
     for arg in cmdline.split_whitespace() {
-        if let Some(value) = arg.strip_prefix("rootfs=") {
-            if value == "virtiofs" {
-                for tag_arg in cmdline.split_whitespace() {
-                    if let Some(tag) = tag_arg.strip_prefix("virtiofs_tag=") {
-                        return Some(tag.to_string());
-                    }
+        if let Some(value) = arg.strip_prefix("rootfs=")
+            && value == "virtiofs"
+        {
+            for tag_arg in cmdline.split_whitespace() {
+                if let Some(tag) = tag_arg.strip_prefix("virtiofs_tag=") {
+                    return Some(tag.to_string());
                 }
-                return Some("share_folder".to_string());
             }
+            return Some("share_folder".to_string());
         }
     }
     None
