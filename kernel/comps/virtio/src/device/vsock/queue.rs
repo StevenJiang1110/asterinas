@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use alloc::{boxed::Box, collections::vec_deque::VecDeque, vec::Vec};
+use core::mem::size_of;
 
 use aster_util::slot_vec::SlotVec;
 use ostd::mm::{
@@ -57,7 +58,7 @@ impl TxQueue {
                 completion.on_pending_submit();
             }
 
-            let token = self.queue.add_dma_buf(&[packet.inner()], &[]).unwrap();
+            let token = self.queue.add_input_bufs(&[packet.inner()]).unwrap();
 
             debug_assert!(self.inflight[token as usize].is_none());
             self.inflight[token as usize] = Some(packet);
@@ -76,7 +77,7 @@ impl TxQueue {
             });
         }
 
-        let token = self.queue.add_dma_buf(&[packet.inner()], &[]).unwrap();
+        let token = self.queue.add_input_bufs(&[packet.inner()]).unwrap();
 
         debug_assert!(self.inflight[token as usize].is_none());
         self.inflight[token as usize] = Some(packet);
@@ -129,7 +130,7 @@ impl RxQueue {
         let mut buffers = SlotVec::new();
         for index in 0..Self::QUEUE_SIZE {
             let buffer = RxPacket::new().expect("allocating recv packet fails");
-            let token = queue.add_dma_buf(&[], &[buffer.inner()]).unwrap();
+            let token = queue.add_output_bufs(&[buffer.inner()]).unwrap();
             assert_eq!(token, index);
             assert_eq!(buffers.put(buffer) as u16, index);
         }
@@ -168,7 +169,7 @@ impl RxQueue {
             self.pending = RxPacket::new().ok();
         }
         if self.pending.is_none() {
-            log::warn!("allocating recv packet fails");
+            ostd::warn!("allocating recv packet fails");
             return None;
         }
 
@@ -176,7 +177,7 @@ impl RxQueue {
         let packet = self.buffers.remove(token as usize).unwrap();
 
         let new_packet = self.pending.take().unwrap();
-        let new_token = self.queue.add_dma_buf(&[], &[new_packet.inner()]).unwrap();
+        let new_token = self.queue.add_output_bufs(&[new_packet.inner()]).unwrap();
         debug_assert_eq!(new_token, token);
         self.buffers.put_at(new_token as usize, new_packet);
 
@@ -202,7 +203,7 @@ impl EventQueue {
             .expect("creating event queue fails");
 
         let buffer = DmaStream::alloc_uninit(1, false).expect("allocating event buffer fails");
-        let token = queue.add_dma_buf(&[], &[&buffer]).unwrap();
+        let token = queue.add_output_bufs(&[&buffer]).unwrap();
         debug_assert_eq!(token, 0);
 
         if queue.should_notify() {
@@ -223,7 +224,7 @@ impl EventQueue {
         let event_id = self.buffer.reader().unwrap().read_val::<u32>().unwrap();
         let event_id = VirtioVsockEventId::try_from(event_id).ok();
 
-        let token = self.queue.add_dma_buf(&[], &[&self.buffer]).unwrap();
+        let token = self.queue.add_output_bufs(&[&self.buffer]).unwrap();
         debug_assert_eq!(token, 0);
 
         event_id

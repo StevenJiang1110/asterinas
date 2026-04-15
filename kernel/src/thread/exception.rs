@@ -6,7 +6,7 @@
 use ostd::arch::cpu::context::CpuException;
 #[cfg(target_arch = "loongarch64")]
 use ostd::arch::cpu::context::CpuExceptionInfo as CpuException;
-use ostd::{arch::cpu::context::UserContext, task::Task};
+use ostd::{arch::cpu::context::UserContext, debug, task::Task, warn};
 
 use crate::{
     prelude::*,
@@ -16,7 +16,7 @@ use crate::{
 
 /// We can't handle most exceptions, just send self a fault signal before return to user space.
 pub fn handle_exception(ctx: &Context, context: &UserContext, exception: CpuException) {
-    trace!("[User Trap] handle exception: {:#x?}", exception);
+    debug!("[User Trap] handle exception: {:#x?}", exception);
 
     if let Ok(page_fault_info) = PageFaultInfo::try_from(&exception) {
         let user_space = ctx.user_space();

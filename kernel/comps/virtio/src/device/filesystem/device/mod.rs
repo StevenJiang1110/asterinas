@@ -11,12 +11,13 @@ use alloc::{
 use core::{cmp, hint::spin_loop, mem::size_of};
 
 use aster_util::mem_obj_slice::Slice;
-use log::{debug, info, warn};
 use ostd::{
     arch::trap::TrapFrame,
+    debug, info,
     mm::{VmIo, VmReader, VmWriter, io::util::HasVmReaderWriter},
     sync::{LocalIrqDisabled, SpinLock, Waiter, Waker},
     timer::{Jiffies, TIMER_FREQ},
+    warn,
 };
 use ostd_pod::Pod;
 use spin::Once;

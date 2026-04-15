@@ -17,10 +17,10 @@ use aster_virtio::device::filesystem::{
         FOPEN_DIRECT_IO, FOPEN_KEEP_CACHE, FuseAttrOut, SetattrIn,
     },
 };
-use log::warn;
 use ostd::{
     mm::{HasSize, VmReader, VmWriter, io::util::HasVmReaderWriter},
     sync::RwLock,
+    warn,
 };
 
 use super::{

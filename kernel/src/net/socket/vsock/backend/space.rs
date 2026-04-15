@@ -349,7 +349,7 @@ impl VsockSpace {
     #[must_use]
     pub(super) fn send_packet(&self, header: &VirtioVsockHdr) -> bool {
         let Ok(builder) = TxPacket::new_builder() else {
-            log::warn!("failed to allocate vsock packet: {:?}", header);
+            warn!("failed to allocate vsock packet: {:?}", header);
             return false;
         };
         let packet = builder.build(header);

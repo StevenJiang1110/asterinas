@@ -4,9 +4,9 @@ use alloc::{boxed::Box, string::ToString, sync::Arc};
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use aster_softirq::BottomHalfDisabled;
-use log::debug;
 use ostd::{
     arch::trap::TrapFrame,
+    debug,
     sync::{SpinLock, SpinLockGuard},
 };
 use spin::Once;

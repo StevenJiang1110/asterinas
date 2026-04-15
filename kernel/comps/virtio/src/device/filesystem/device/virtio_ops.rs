@@ -28,7 +28,7 @@ impl FileSystemDevice {
             max_request_queues_from_transport,
         );
 
-        log::warn!(
+        warn!(
             "[virtiofs-debug] init start parsed_tag='{}' raw_tag={:?} total_queues={} num_request_queues={} special_queues_count={} notify_supported={}",
             parsed_tag,
             &config.tag,
@@ -39,7 +39,7 @@ impl FileSystemDevice {
         );
 
         if request_queue_count == 0 {
-            log::warn!(
+            warn!(
                 "[virtiofs-debug] request queue count is zero: total_queues={} special_queues_count={} config.num_request_queues={}",
                 total_queues,
                 special_queues_count,
@@ -102,7 +102,7 @@ impl FileSystemDevice {
         drop(transport);
 
         device.fuse_init()?;
-        log::warn!(
+        warn!(
             "[virtiofs-debug] fuse init ok for tag='{}'",
             device.tag
         );
@@ -111,7 +111,7 @@ impl FileSystemDevice {
         let mut devices = devices.disable_irq().lock();
         devices.push(device.clone());
         let registered_tags: Vec<&str> = devices.iter().map(|device| device.tag.as_str()).collect();
-        log::warn!(
+        warn!(
             "[virtiofs-debug] registered tags after init: {:?}",
             registered_tags
         );
@@ -175,7 +175,7 @@ impl FileSystemDevice {
         {
             let mut virt_queue = queue.queue.lock();
 
-            let token = virt_queue.add_dma_buf(in_slices, out_slices)?;
+            let token = virt_queue.add_dma_bufs(in_slices, out_slices)?;
 
             queue
                 .pending_requests
