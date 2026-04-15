@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use core2::io::{Cursor, Read};
+use aster_compression::decompress_gzip;
 use cpio_decoder::{CpioDecoder, CpioEntry, FileMetadata, FileType};
 use device_id::{DeviceId, MajorId, MinorId};
 use lending_iterator::LendingIterator;
-use libflate::gzip::Decoder as GZipDecoder;
+use no_std_io2::io::{Cursor, Read};
 use ostd::boot::boot_info;
 
 use super::{
@@ -13,39 +13,26 @@ use super::{
 };
 use crate::{fs::vfs::inode::MknodType, prelude::*};
 
-struct BoxedReader<'a>(Box<dyn Read + 'a>);
-
-impl<'a> BoxedReader<'a> {
-    pub fn new(reader: Box<dyn Read + 'a>) -> Self {
-        BoxedReader(reader)
-    }
-}
-
-impl Read for BoxedReader<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> core2::io::Result<usize> {
-        self.0.read(buf)
-    }
-}
-
 /// Unpack and prepare the rootfs from the initramfs CPIO buffer.
 pub fn init_in_first_kthread(path_resolver: &PathResolver) -> Result<()> {
     let initramfs_buf = boot_info()
         .initramfs
         .ok_or_else(|| Error::with_message(Errno::EINVAL, "no initramfs found"))?;
 
-    let (reader, suffix) = match &initramfs_buf[..4] {
+    let decompressed_initramfs;
+    let (initramfs_data, suffix) = match initramfs_buf {
         // Gzip magic number: 0x1F 0x8B
-        &[0x1F, 0x8B, _, _] => {
-            let gzip_decoder = GZipDecoder::new(initramfs_buf)
+        [0x1F, 0x8B, ..] => {
+            decompressed_initramfs = decompress_gzip(initramfs_buf)
                 .map_err(|_| Error::with_message(Errno::EINVAL, "invalid gzip buffer"))?;
-            (BoxedReader::new(Box::new(gzip_decoder)), ".gz")
+            (decompressed_initramfs.as_slice(), ".gz")
         }
-        _ => (BoxedReader::new(Box::new(Cursor::new(initramfs_buf))), ""),
+        _ => (initramfs_buf, ""),
     };
 
     println!("[kernel] unpacking initramfs.cpio{} to rootfs ...", suffix);
 
-    let mut decoder = CpioDecoder::new(reader);
+    let mut decoder = CpioDecoder::new(Cursor::new(initramfs_data));
 
     while let Some(entry_result) = decoder.next() {
         let mut entry = entry_result?;
@@ -63,7 +50,7 @@ pub fn init_in_first_kthread(path_resolver: &PathResolver) -> Result<()> {
 }
 
 fn try_append_entry_to_rootfs(
-    entry: &mut CpioEntry<BoxedReader>,
+    entry: &mut CpioEntry<impl Read>,
     path_resolver: &PathResolver,
 ) -> Result<()> {
     // Make sure the name is a relative path, and is not end with "/".
