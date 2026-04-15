@@ -8,39 +8,29 @@ source "${script_dir}/common.sh"
 
 show_help() {
   cat <<'EOF'
-Usage: bash tools/kata/run_kata_alpine.sh
+Usage: bash tools/kata/run_kata_smoke.sh
 
-Installs the local Kata test environment and runs one or more full Alpine
+Installs the local Kata test environment and runs one or more configurable
 smoke-test passes.
 
 Environment:
-  KATA_PASSES              Number of passes to run. Default: 1.
-  KATA_CGROUP_NAMESPACE    Cgroup namespace for `nerdctl run`. Default: private.
-  CRICTL_VERSION           Optional `crictl` version. Default: v1.29.0.
-  KATA_VERSION             Kata release version. Default: 3.28.0.
-  NERDCTL_VERSION          `nerdctl` release version. Default: v2.2.2.
-  PAUSE_IMAGE              Pause image for inner `containerd`. Default:
-                           registry.k8s.io/pause:3.10.
+  KATA_CONFIG_FILE  Optional Bash config fragment. Default:
+                    tools/kata/config/smoke-test.env.
+  KATA_PASSES       Number of passes to run.
 EOF
 }
 
 kata_handle_help_or_no_args show_help "$@"
+kata_load_config "${script_dir}/config/smoke-test.env"
 
-: "${CRICTL_VERSION:=v1.29.0}"
-: "${KATA_VERSION:=3.28.0}"
-: "${NERDCTL_VERSION:=v2.2.2}"
-: "${PAUSE_IMAGE:=registry.k8s.io/pause:3.10}"
-: "${KATA_CGROUP_NAMESPACE:=private}"
-export CRICTL_VERSION KATA_CGROUP_NAMESPACE KATA_VERSION NERDCTL_VERSION PAUSE_IMAGE
-
-pass_count="${KATA_PASSES:-1}"
+pass_count="${KATA_PASSES}"
 
 check_local_cgroup_delegation() {
   if [ ! -f /sys/fs/cgroup/cgroup.controllers ]; then
     return 0
   fi
 
-  probe_dir="/sys/fs/cgroup/kata-make-preflight-$$"
+  probe_dir="/sys/fs/cgroup/kata-script-preflight-$$"
   mkdir "${probe_dir}"
   if ! printf '+cpu\n' > "${probe_dir}/cgroup.subtree_control" 2>/dev/null; then
     rmdir "${probe_dir}" 2>/dev/null || true
@@ -63,6 +53,6 @@ check_local_cgroup_delegation
 bash "${script_dir}/install_kata_env.sh"
 
 for pass_index in $(seq 1 "${pass_count}"); do
-  echo "==> Kata local run pass ${pass_index}/${pass_count}"
+  echo "==> Kata smoke-test pass ${pass_index}/${pass_count}"
   bash "${script_dir}/run_kata_pass.sh"
 done

@@ -15,12 +15,14 @@ Installs the repo-owned Kata and `containerd` configs, then starts the
 background services used by the smoke test.
 
 Environment:
-  PAUSE_IMAGE  Pause image for inner `containerd`. Default:
-               registry.k8s.io/pause:3.10.
+  KATA_CONFIG_FILE  Optional Bash config fragment. Default:
+                    tools/kata/config/smoke-test.env.
+  PAUSE_IMAGE       Pause image for inner `containerd`.
 EOF
 }
 
 kata_handle_help_or_no_args show_help "$@"
+kata_load_config "${script_dir}/config/smoke-test.env"
 
 select_kata_config_source() {
   if [ -f /opt/kata/share/defaults/kata-containers/configuration.toml ]; then

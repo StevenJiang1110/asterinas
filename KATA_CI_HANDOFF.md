@@ -8,7 +8,7 @@
 - Current split PR: `https://github.com/StevenJiang1110/asterinas/pull/58`
 - Workflow: `.github/workflows/test_kata_guest_os.yml`
 - Latest repo commit in this handoff state:
-  - `217f9de93` `Refactor Kata helpers for local and workflow use`
+  - current `HEAD` after the Kata script-entrypoint cleanup
 - Latest passing run before the 3-step split: `29`
   - `https://github.com/StevenJiang1110/asterinas/actions/runs/24171125156`
 - Latest passing commit before the 3-step split:
@@ -17,11 +17,21 @@
   - workflow split into install plus two full start / check / test / cleanup passes
   - helper scripts are now named for shared local and workflow use:
     `install_kata_env.sh`, `start_kata_services.sh`, `check_kata_env.sh`,
-    `test_nerdctl_alpine.sh`, and `stop_kata_services.sh`
+    `run_kata_workload.sh`, and `stop_kata_services.sh`
   - `run_kata_pass.sh` now owns one full Kata pass (`start` + `check` +
     `test` + cleanup), and both workflow and local entrypoints reuse it
   - `install_kata_env.sh` now installs packages/binaries only; repo-owned
     configs live under `tools/kata/config/`
+  - the top-level local entrypoint is now `bash tools/kata/run_kata_smoke.sh`;
+    the old top-level `make kata` wrapper has been removed
+  - the smoke workload is now configured from `tools/kata/config/smoke-test.env`
+    instead of being hard-coded in the entry script
+  - the workload-facing script names are now consistently `run_kata_*`
+  - the main smoke-test environment knobs now use the generic `KATA_TEST_*`
+    naming, with compatibility mapping from the old `KATA_ALPINE_*` names
+  - the workflow now takes its common defaults from
+    `tools/kata/config/smoke-test.env` and only sets
+    `KATA_CGROUP_NAMESPACE=host` explicitly
   - `install_kata_env.sh` now skips `apt-get update` / `apt-get install`
     when the required distro packages are already present, unless
     `KATA_FORCE_APT=1` is set
@@ -60,13 +70,13 @@ Inside that job container, the workflow:
 ## Key Files
 
 - Workflow: `.github/workflows/test_kata_guest_os.yml`
-- Local entrypoint: `tools/kata/run_kata_alpine.sh`
+- Local entrypoint: `tools/kata/run_kata_smoke.sh`
 - Shared one-pass entrypoint: `tools/kata/run_kata_pass.sh`
+- Workload step: `tools/kata/run_kata_workload.sh`
 - Install step: `tools/kata/install_kata_env.sh`
 - Service start helper: `tools/kata/start_kata_services.sh`
 - Check step: `tools/kata/check_kata_env.sh`
 - Config directory: `tools/kata/config/`
-- Alpine test: `tools/kata/test_nerdctl_alpine.sh`
 - Service stop helper: `tools/kata/stop_kata_services.sh`
 - KVM probe: `tools/kata/check_kvm_create_vm.py`
 
@@ -123,19 +133,21 @@ Check these first:
   workflow paths share the same helper naming and the same single-pass entry
   script.
 
-## Local `make kata` Handoff
+## Local Kata Script Handoff
 
-As of April 10, 2026:
+As of April 15, 2026:
 
-- the repo has `make kata`
+- the repo has `bash tools/kata/run_kata_smoke.sh`
 - the local scripts are wired up
 - the current blocker is no longer repo logic
 
 ### Local Changes
 
-- Added `make kata`
-- Added `tools/kata/run_kata_alpine.sh`
-- Local `make kata` now uses `virtio-fs`
+- Added `tools/kata/run_kata_smoke.sh`
+- Added `tools/kata/run_kata_workload.sh`
+- Removed the top-level `make kata` wrapper so local runs go directly through
+  `tools/kata/`
+- Local Kata script runs now use `virtio-fs`
 - Local Kata config now sets `file_mem_backend = "/tmp"` to avoid the default
   `virtio-fs` shared guest memory backend path (`/dev/shm`), which was only
   `64M` in this dev container
@@ -143,10 +155,14 @@ As of April 10, 2026:
   `quay.io/kata-containers/kata-deploy:${KATA_VERSION}` payload image
 - Local smoke test now pulls Alpine from `quay.io/libpod/alpine:latest`
   because `docker.io` was not reachable in this environment
-- Local install no longer runs `apt-get update` on every `make kata` when the
+- Local install no longer runs `apt-get update` on every local smoke run when the
   required distro packages are already installed
 - Successful local runs no longer print the full `kata-runtime check -v` and
   `nerdctl --debug-full` output by default
+- The smoke image / command / output check now live in
+  `tools/kata/config/smoke-test.env`
+- The main configurable workload knobs now use `KATA_TEST_*`; the old
+  `KATA_ALPINE_*` names are compatibility aliases only
 
 ### Local Verification Result
 
@@ -164,10 +180,10 @@ repo-owned Kata drop-in from `virtio-9p` to `virtio-fs` and explicitly setting
 - `KVM_CREATE_VM` succeeds
 - `nerdctl pull` succeeds
 - `nerdctl run --runtime io.containerd.kata.v2 ...` succeeds
-- `make kata` succeeds
-- `KATA_PASSES=2 make kata` succeeds
+- `bash tools/kata/run_kata_smoke.sh` succeeds
+- `KATA_PASSES=2 bash tools/kata/run_kata_smoke.sh` succeeds
 - `kata-runtime env` reports `SharedFS = "virtio-fs"`
-- repeated `make kata` runs stay quiet and do not re-run package refresh by
+- repeated local smoke runs stay quiet and do not re-run package refresh by
   default
 
 ### Current Status
@@ -197,9 +213,12 @@ uses `file_mem_backend = "/tmp"` instead.
 
 The current repo-side handoff point is:
 
-- `make kata` exists
+- `bash tools/kata/run_kata_smoke.sh` is the top-level local entrypoint
 - workflow and local runs share the same one-pass helper
 - the helper names are no longer CI-specific
+- the smoke workload is configured from `tools/kata/config/smoke-test.env`
+- the workload-facing script names are consistently `run_kata_*`
+- the main configurable workload knobs are `KATA_TEST_*`
 - the main shell helpers provide `--help`
 - repeated local runs avoid unnecessary package refresh
 - successful local runs keep most debug logs out of the terminal by default

@@ -20,16 +20,6 @@ OSTD_TASK_STACK_SIZE_IN_PAGES ?= 64
 FEATURES ?=
 NO_DEFAULT_FEATURES ?= 0
 COVERAGE ?= 0
-CRICTL_VERSION ?= v1.29.0
-KATA_ALPINE_IMAGE ?= quay.io/libpod/alpine:latest
-KATA_ALPINE_RELEASE_REGEX ?= ^[0-9]+\.[0-9]+(\.|$$)
-KATA_INSTALL_CRICTL ?= 0
-KATA_PASSES ?= 1
-KATA_PAYLOAD_IMAGE ?= quay.io/kata-containers/kata-deploy:$(KATA_VERSION)
-KATA_VERSION ?= 3.28.0
-NERDCTL_VERSION ?= v2.2.2
-PAUSE_IMAGE ?= registry.k8s.io/pause:3.10
-
 # Specify the primary system console (supported: tty0, ttyS0, hvc0).
 # - tty0: The active virtual terminal (VT).
 # - ttyS0: The serial (UART) terminal.
@@ -416,10 +406,6 @@ ktest: initramfs $(CARGO_OSDK)
 	./tools/run_ktest.sh \
         --crates "$$CRATES" \
         -- $(CARGO_OSDK_TEST_ARGS)
-
-.PHONY: kata
-kata:
-	@bash tools/kata/run_kata_alpine.sh
 
 .PHONY: docs
 docs: $(CARGO_OSDK)

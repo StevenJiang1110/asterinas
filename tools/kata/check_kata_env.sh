@@ -14,12 +14,15 @@ Verifies that the background Kata and `containerd` services are ready before
 running the smoke workload.
 
 Environment:
+  KATA_CONFIG_FILE  Optional Bash config fragment. Default:
+                    tools/kata/config/smoke-test.env.
   KATA_CHECK_DEBUG  Set to 1/true/yes to print `kata-runtime check -v` output
                     during successful runs too.
 EOF
 }
 
 kata_handle_help_or_no_args show_help "$@"
+kata_load_config "${script_dir}/config/smoke-test.env"
 
 should_print_kata_check_output() {
   case "${KATA_CHECK_DEBUG:-0}" in
@@ -69,8 +72,8 @@ report_kvm_probe_failure() {
 
 wait_for_containerd_ready() {
   timeout 60 bash -c '
-    until [ -S /run/containerd/containerd.sock ] &&
-      ctr plugins ls >/tmp/ctr-plugins.txt 2>/dev/null &&
+    until [ -S "${CONTAINERD_ADDRESS}" ] &&
+      ctr --address "${CONTAINERD_ADDRESS}" plugins ls >/tmp/ctr-plugins.txt 2>/dev/null &&
       awk '\''$1 == "io.containerd.grpc.v1" && $2 == "cri" && $NF == "ok" { found = 1 } END { exit(found ? 0 : 1) }'\'' /tmp/ctr-plugins.txt; do
       sleep 1
     done
@@ -91,12 +94,12 @@ runc --version
 nerdctl --version
 kata-runtime --version
 
-test -S /run/containerd/containerd.sock
-ctr plugins ls > /tmp/ctr-plugins.txt
+test -S "${CONTAINERD_ADDRESS}"
+ctr --address "${CONTAINERD_ADDRESS}" plugins ls > /tmp/ctr-plugins.txt
 awk '$1 == "io.containerd.grpc.v1" && $2 == "cri" && $NF == "ok" { found = 1 } END { exit(found ? 0 : 1) }' /tmp/ctr-plugins.txt
 if command -v crictl >/dev/null; then
   crictl --version
-  crictl --runtime-endpoint unix:///run/containerd/containerd.sock --image-endpoint unix:///run/containerd/containerd.sock info > /tmp/crictl-info.json
+  crictl --runtime-endpoint "unix://${CONTAINERD_ADDRESS}" --image-endpoint "unix://${CONTAINERD_ADDRESS}" info > /tmp/crictl-info.json
   jq -e 'has("config") and has("status")' /tmp/crictl-info.json >/dev/null
 else
   echo "crictl not installed; skipping CRI info probe."
@@ -105,7 +108,7 @@ fi
 grep -F 'runtime_type = "io.containerd.kata.v2"' /etc/containerd/config.toml
 grep -F 'ConfigPath = "/etc/kata-containers/configuration.toml"' /etc/containerd/config.toml
 
-nerdctl --address /run/containerd/containerd.sock info > /tmp/nerdctl-info.txt
+nerdctl --address "${CONTAINERD_ADDRESS}" info > /tmp/nerdctl-info.txt
 kata-runtime env > /tmp/kata-env.txt
 grep -E '/etc/kata-containers/configuration.toml|/opt/kata/share/defaults/kata-containers/' /tmp/kata-env.txt
 
@@ -128,7 +131,7 @@ fi
 
 if [ "${kata_check_status}" -ne 0 ]; then
   summarize_kata_check_strace
-  echo "::warning title=kata-runtime check::kata-runtime check failed, but the direct KVM probe succeeded; continuing with the real nerdctl workload because this path uses --net none."
+  echo "::warning title=kata-runtime check::kata-runtime check failed, but the direct KVM probe succeeded; continuing with the configured nerdctl workload."
   emit_github_error "kata-runtime check" /tmp/kata-check.txt
   emit_github_error "kata-runtime strace" /tmp/kata-check.strace.summary
 fi
