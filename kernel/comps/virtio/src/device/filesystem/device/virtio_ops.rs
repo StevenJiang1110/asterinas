@@ -41,9 +41,7 @@ impl FileSystemDevice {
         if request_queue_count == 0 {
             warn!(
                 "[virtiofs-debug] request queue count is zero: total_queues={} special_queues_count={} config.num_request_queues={}",
-                total_queues,
-                special_queues_count,
-                config.num_request_queues
+                total_queues, special_queues_count, config.num_request_queues
             );
             return Err(VirtioDeviceError::QueuesAmountDoNotMatch(
                 total_queues,
@@ -102,10 +100,7 @@ impl FileSystemDevice {
         drop(transport);
 
         device.fuse_init()?;
-        warn!(
-            "[virtiofs-debug] fuse init ok for tag='{}'",
-            device.tag
-        );
+        warn!("[virtiofs-debug] fuse init ok for tag='{}'", device.tag);
 
         let devices = FILESYSTEM_DEVICES.call_once(|| SpinLock::new(Vec::new()));
         let mut devices = devices.disable_irq().lock();

@@ -40,11 +40,7 @@
 static const char *ns_files[] = { "cgroup", "mnt", "user", "uts", "ipc" };
 static const char *ns_names[] = { "cgroup", "mnt", "user", "uts", "ipc" };
 static const int clone_flags[] = {
-	CLONE_NEWCGROUP,
-	CLONE_NEWNS,
-	CLONE_NEWUSER,
-	CLONE_NEWUTS,
-	CLONE_NEWIPC,
+	CLONE_NEWCGROUP, CLONE_NEWNS, CLONE_NEWUSER, CLONE_NEWUTS, CLONE_NEWIPC,
 };
 static const size_t ns_count = sizeof(ns_files) / sizeof(ns_files[0]);
 

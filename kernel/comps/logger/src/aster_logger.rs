@@ -2,10 +2,7 @@
 
 use core::time::Duration;
 
-use ostd::{
-    log::Record,
-    timer::Jiffies,
-};
+use ostd::{log::Record, timer::Jiffies};
 
 /// The logger used for Asterinas.
 struct AsterLogger;
