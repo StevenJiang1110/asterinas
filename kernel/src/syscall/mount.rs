@@ -205,6 +205,12 @@ fn do_new_mount(
         let fs_type_str = fs_type_cstr
             .to_str()
             .map_err(|_| Error::with_message(Errno::ENODEV, "invalid file system type"))?;
+        
+        println!("fs_type_str = {}", fs_type_str);
+        if fs_type_str == "devtmpfs" {
+            return Ok(());
+        }
+        
         crate::fs::vfs::registry::look_up(fs_type_str).ok_or(Error::with_message(
             Errno::ENODEV,
             "the filesystem is not configured in the kernel",
