@@ -16,13 +16,12 @@
 - Current refactor status:
   - workflow split into install plus two full start / check / test / cleanup passes
   - helper scripts are now named for shared local and workflow use:
-    `install_kata_env.sh`, `start_kata_services.sh`, `check_kata_env.sh`,
-    `run_kata_workload.sh`, and `stop_kata_services.sh`
-  - `run_kata_pass.sh` now owns one full Kata pass (`start` + `check` +
-    `test` + cleanup), and both workflow and local entrypoints reuse it
-  - `install_kata_env.sh` now installs packages/binaries only; repo-owned
-    configs live under `tools/kata/config/`
-  - the top-level local entrypoint is now `bash tools/kata/run_kata_smoke.sh`;
+    `kata_env.sh`, `kata_services.sh`, and `run_kata.sh`
+  - `run_kata.sh` now provides the shared `smoke`, `pass`, and `workload`
+    tasks for both workflow and local entrypoints
+  - `kata_env.sh` now provides the shared `install` and `check` environment
+    tasks; repo-owned configs live under `tools/kata/config/`
+  - the top-level local entrypoint is now `bash tools/kata/run_kata.sh smoke`;
     the old top-level `make kata` wrapper has been removed
   - the smoke workload is now configured from `tools/kata/config/smoke-test.env`
     instead of being hard-coded in the entry script
@@ -32,7 +31,7 @@
   - the workflow now takes its common defaults from
     `tools/kata/config/smoke-test.env` and only sets
     `KATA_CGROUP_NAMESPACE=host` explicitly
-  - `install_kata_env.sh` now skips `apt-get update` / `apt-get install`
+  - `kata_env.sh install` now skips `apt-get update` / `apt-get install`
     when the required distro packages are already present, unless
     `KATA_FORCE_APT=1` is set
   - the main shell helpers now provide `--help` output and small inline
@@ -63,22 +62,18 @@ The working setup uses a GitHub Actions job container:
 Inside that job container, the workflow:
 
 - installs `containerd`, `nerdctl`, `crictl`, Kata artifacts, and related packages
-- runs `tools/kata/install_kata_env.sh` once
-- runs `tools/kata/run_kata_pass.sh` twice
+- runs `tools/kata/kata_env.sh install` once
+- runs `tools/kata/run_kata.sh pass` twice
 - prints the key failure logs directly in the job output
 
 ## Key Files
 
 - Workflow: `.github/workflows/test_kata_guest_os.yml`
-- Local entrypoint: `tools/kata/run_kata_smoke.sh`
-- Shared one-pass entrypoint: `tools/kata/run_kata_pass.sh`
-- Workload step: `tools/kata/run_kata_workload.sh`
-- Install step: `tools/kata/install_kata_env.sh`
-- Service start helper: `tools/kata/start_kata_services.sh`
-- Check step: `tools/kata/check_kata_env.sh`
+- Local entrypoint: `tools/kata/run_kata.sh smoke`
+- Shared task runner: `tools/kata/run_kata.sh`
+- Environment helper: `tools/kata/kata_env.sh`
+- Service helper: `tools/kata/kata_services.sh`
 - Config directory: `tools/kata/config/`
-- Service stop helper: `tools/kata/stop_kata_services.sh`
-- KVM probe: `tools/kata/check_kvm_create_vm.py`
 
 ## Verified Findings
 
@@ -95,7 +90,7 @@ Inside that job container, the workflow:
   - `--security-opt apparmor=unconfined`
   - `--security-opt seccomp=unconfined`
 - `kata-runtime check` is diagnostic only for this CI path; the hard gate is the
-  direct `KVM_CREATE_VM` probe.
+  configured `nerdctl` Kata workload.
 - The old `.kata-ci-diagnostics` artifact upload was only for bring-up and is
   not part of the steady-state workflow anymore.
 - The inner `containerd` / `nerdctl` stack must use snapshotter `native`.
@@ -120,7 +115,6 @@ Check these first:
    - `--cgroupns host`
 2. Did the inner `containerd` / `nerdctl` snapshotter stop using `native`?
 3. Do the job logs still show the key failure output:
-   - `kvm-create-vm.txt`
    - `kata-check.txt`
    - `containerd.log`
    - `nerdctl-run-command.txt`
@@ -137,14 +131,13 @@ Check these first:
 
 As of April 15, 2026:
 
-- the repo has `bash tools/kata/run_kata_smoke.sh`
+- the repo has `bash tools/kata/run_kata.sh smoke`
 - the local scripts are wired up
 - the current blocker is no longer repo logic
 
 ### Local Changes
 
-- Added `tools/kata/run_kata_smoke.sh`
-- Added `tools/kata/run_kata_workload.sh`
+- Added `tools/kata/run_kata.sh`
 - Removed the top-level `make kata` wrapper so local runs go directly through
   `tools/kata/`
 - Local Kata script runs now use `virtio-fs`
@@ -175,13 +168,12 @@ repo-owned Kata drop-in from `virtio-9p` to `virtio-fs` and explicitly setting
 
 - Kata install works
 - inner `containerd` starts
-- `check_kata_env.sh` passes
+- `bash tools/kata/kata_env.sh check` passes
 - `/dev/kvm` is usable
-- `KVM_CREATE_VM` succeeds
 - `nerdctl pull` succeeds
 - `nerdctl run --runtime io.containerd.kata.v2 ...` succeeds
-- `bash tools/kata/run_kata_smoke.sh` succeeds
-- `KATA_PASSES=2 bash tools/kata/run_kata_smoke.sh` succeeds
+- `bash tools/kata/run_kata.sh smoke` succeeds
+- `KATA_PASSES=2 bash tools/kata/run_kata.sh smoke` succeeds
 - `kata-runtime env` reports `SharedFS = "virtio-fs"`
 - repeated local smoke runs stay quiet and do not re-run package refresh by
   default
@@ -213,8 +205,8 @@ uses `file_mem_backend = "/tmp"` instead.
 
 The current repo-side handoff point is:
 
-- `bash tools/kata/run_kata_smoke.sh` is the top-level local entrypoint
-- workflow and local runs share the same one-pass helper
+- `bash tools/kata/run_kata.sh smoke` is the top-level local entrypoint
+- workflow and local runs share the same unified task runner
 - the helper names are no longer CI-specific
 - the smoke workload is configured from `tools/kata/config/smoke-test.env`
 - the workload-facing script names are consistently `run_kata_*`

@@ -33,14 +33,14 @@ jobs:
       - name: Install Kata environment
         run: |
           set -euxo pipefail
-          bash tools/kata/install_kata_env.sh
+          bash tools/kata/kata_env.sh install
 
       - name: Run Kata pass 1
         run: |
           set -euxo pipefail
-          bash tools/kata/run_kata_pass.sh
+          bash tools/kata/run_kata.sh pass
 
       - name: Run Kata pass 2
         run: |
           set -euxo pipefail
-          bash tools/kata/run_kata_pass.sh
+          bash tools/kata/run_kata.sh pass

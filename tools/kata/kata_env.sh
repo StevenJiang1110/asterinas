@@ -8,47 +8,39 @@ source "${script_dir}/common.sh"
 
 show_help() {
   cat <<'EOF'
-Usage: bash tools/kata/install_kata_env.sh
+Usage: bash tools/kata/kata_env.sh <install|check>
 
-Installs the distro packages and userspace binaries required by the Kata
-smoke-test helpers.
+Manages the Kata environment lifecycle used by the smoke-test helpers.
+
+Commands:
+  install  Installs the distro packages and userspace binaries required by the
+           Kata smoke-test helpers.
+  check    Verifies that the background Kata and `containerd` services are
+           ready before running the configured workload.
 
 Environment:
-  KATA_CONFIG_FILE    Optional Bash config fragment. Default:
-                      tools/kata/config/smoke-test.env.
-  CRICTL_VERSION       Optional `crictl` version. Default: v1.29.0.
-  KATA_VERSION         Kata release version. Default: 3.28.0.
-  NERDCTL_VERSION      `nerdctl` release version. Default: v2.2.2.
-  KATA_INSTALL_CRICTL  Set to 1/true/yes to install `crictl`.
-  KATA_FORCE_APT       Set to 1/true/yes to force `apt-get update && apt-get
-                       install` even when the required distro packages are
-                       already present.
-  KATA_PAYLOAD_IMAGE   Kata payload image. Default:
-                       quay.io/kata-containers/kata-deploy:${KATA_VERSION}.
-  KATA_ASTERINAS_KERNEL_PATH
-                       Optional local `aster-kernel-osdk-bin.qemu_elf` path.
-                       When present, patches the official Kata base install the
-                       same way as the `jjf-dev/kata-containers` Asterinas
-                       release workflow.
-  KATA_STATIC_TARBALL_URL
-                       Optional Kata static tarball URL. When set, installs
-                       Kata directly from that tarball instead of the payload
-                       image flow.
+  KATA_CONFIG_FILE              Optional Bash config fragment. Default:
+                                tools/kata/config/smoke-test.env.
+  CRICTL_VERSION                Optional `crictl` version. Default: v1.29.0.
+  KATA_VERSION                  Kata release version. Default: 3.28.0.
+  NERDCTL_VERSION               `nerdctl` release version. Default: v2.2.2.
+  KATA_INSTALL_CRICTL           Set to 1/true/yes to install `crictl`.
+  KATA_FORCE_APT                Set to 1/true/yes to force `apt-get update &&
+                                apt-get install`.
+  KATA_PAYLOAD_IMAGE            Kata payload image. Default:
+                                quay.io/kata-containers/kata-deploy:${KATA_VERSION}.
+  KATA_ASTERINAS_KERNEL_PATH    Optional local `aster-kernel-osdk-bin.qemu_elf`
+                                path used to overlay the Kata install.
+  KATA_STATIC_TARBALL_URL       Optional Kata static tarball URL.
   KATA_STATIC_TARBALL_SHA256_URL
-                       Optional checksum URL for the static tarball. Default:
-                       derived from `KATA_STATIC_TARBALL_URL` by replacing
-                       `.tar.zst` with `.SHA256SUMS`.
-  KATA_STATIC_TARBALL_SHA256
-                       Optional expected SHA256 for the static tarball. When
-                       set, skips remote checksum lookup.
-  KATA_STATIC_TARBALL_CACHE_DIR
-                       Cache directory for downloaded static tarballs. Default:
-                       `/var/cache/kata-static`.
+                                Optional checksum URL for the static tarball.
+  KATA_STATIC_TARBALL_SHA256    Optional expected SHA256 for the static tarball.
+  KATA_STATIC_TARBALL_CACHE_DIR Cache directory for downloaded static tarballs.
+                                Default: `/var/cache/kata-static`.
+  KATA_CHECK_DEBUG              Set to 1/true/yes to print `kata-runtime
+                                check -v` output during successful checks too.
 EOF
 }
-
-kata_handle_help_or_no_args show_help "$@"
-kata_load_config "${script_dir}/config/smoke-test.env"
 
 download_release_asset() {
   output_path="$1"
@@ -255,6 +247,10 @@ should_force_apt_install() {
 }
 
 install_required_packages() {
+  local package_name
+  local -a missing_packages
+  local -a packages
+
   packages=(
     busybox-syslogd
     containernetworking-plugins
@@ -315,8 +311,6 @@ install_kata_from_payload_image() {
   install -d -m 0755 "$(dirname "${installer_socket}")" "${installer_root}" "${installer_state}"
   rm -f "${installer_log}" "${payload_pull_log}"
 
-  # A temporary `containerd` instance lets us unpack the official Kata payload
-  # image without pulling extra repo-specific tooling into the helper.
   containerd \
     --address "${installer_socket}" \
     --root "${installer_root}" \
@@ -446,34 +440,170 @@ install_kata_from_asterinas_kernel_overlay() {
   printf 'payload-image %s\n' "${payload_image}" >> "${source_marker_path}"
 }
 
-# Install the shared package dependencies used by local and workflow Kata runs.
-install_required_packages
+should_print_kata_check_output() {
+  case "${KATA_CHECK_DEBUG:-0}" in
+    1 | true | TRUE | yes | YES)
+      return 0
+      ;;
+  esac
 
-if need_nerdctl_install; then
-  download_release_asset \
-    /tmp/nerdctl.tgz \
-    "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz"
-  tar -C /usr/local/bin -xzf /tmp/nerdctl.tgz nerdctl
-fi
+  return 1
+}
 
-if should_install_crictl && need_crictl_install; then
-  download_release_asset \
-    /tmp/crictl.tgz \
-    "https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz"
-  tar -C /usr/local/bin -xzf /tmp/crictl.tgz crictl
-fi
-
-if need_kata_install; then
-  if [ -n "${KATA_ASTERINAS_KERNEL_PATH:-}" ] && [ -f "${KATA_ASTERINAS_KERNEL_PATH}" ]; then
-    install_kata_from_asterinas_kernel_overlay
-  elif [ -n "${KATA_STATIC_TARBALL_URL:-}" ]; then
-    install_kata_from_static_tarball
-  else
-    install_kata_from_payload_image
+emit_github_error() {
+  title="$1"
+  file_path="$2"
+  if [ ! -f "${file_path}" ]; then
+    return 0
   fi
-fi
 
-# Expose the installed Kata binaries on the default `PATH`.
-install -d -m 0755 /usr/local/bin
-ln -sf /opt/kata/bin/kata-runtime /usr/local/bin/kata-runtime
-ln -sf /opt/kata/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-v2
+  message="$(python3 -c 'import pathlib, sys; text = pathlib.Path(sys.argv[1]).read_text(); text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"); print(text[:6000])' "${file_path}")"
+  echo "::error title=${title}::${message}"
+}
+
+print_grouped_file() {
+  group_name="$1"
+  file_path="$2"
+
+  echo "::group::${group_name}"
+  cat "${file_path}" 2>/dev/null || true
+  echo "::endgroup::"
+}
+
+summarize_kata_check_strace() {
+  grep -nE '/dev/kvm|KVM_CREATE_VM|EINVAL|EPERM|ENODEV|EBUSY' /tmp/kata-check.strace > /tmp/kata-check.strace.summary || true
+}
+
+wait_for_containerd_ready() {
+  timeout 60 bash -c '
+    until [ -S "${CONTAINERD_ADDRESS}" ] &&
+      ctr --address "${CONTAINERD_ADDRESS}" plugins ls >/tmp/ctr-plugins.txt 2>/dev/null &&
+      awk '\''$1 == "io.containerd.grpc.v1" && $2 == "cri" && $NF == "ok" { found = 1 } END { exit(found ? 0 : 1) }'\'' /tmp/ctr-plugins.txt; do
+      sleep 1
+    done
+  '
+}
+
+run_install_task() {
+  install_required_packages
+
+  if need_nerdctl_install; then
+    download_release_asset \
+      /tmp/nerdctl.tgz \
+      "https://github.com/containerd/nerdctl/releases/download/${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION#v}-linux-amd64.tar.gz"
+    tar -C /usr/local/bin -xzf /tmp/nerdctl.tgz nerdctl
+  fi
+
+  if should_install_crictl && need_crictl_install; then
+    download_release_asset \
+      /tmp/crictl.tgz \
+      "https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz"
+    tar -C /usr/local/bin -xzf /tmp/crictl.tgz crictl
+  fi
+
+  if need_kata_install; then
+    if [ -n "${KATA_ASTERINAS_KERNEL_PATH:-}" ] && [ -f "${KATA_ASTERINAS_KERNEL_PATH}" ]; then
+      install_kata_from_asterinas_kernel_overlay
+    elif [ -n "${KATA_STATIC_TARBALL_URL:-}" ]; then
+      install_kata_from_static_tarball
+    else
+      install_kata_from_payload_image
+    fi
+  fi
+
+  install -d -m 0755 /usr/local/bin
+  ln -sf /opt/kata/bin/kata-runtime /usr/local/bin/kata-runtime
+  ln -sf /opt/kata/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-v2
+}
+
+run_check_task() {
+  kata_check_status=0
+
+  wait_for_containerd_ready
+
+  uname -a
+  sed -n "1,8p" /etc/os-release
+  ls -l /dev/kvm /dev/vhost-vsock || true
+  kata-runtime --show-default-config-paths
+
+  containerd --version
+  runc --version
+  nerdctl --version
+  kata-runtime --version
+
+  test -S "${CONTAINERD_ADDRESS}"
+  ctr --address "${CONTAINERD_ADDRESS}" plugins ls > /tmp/ctr-plugins.txt
+  awk '$1 == "io.containerd.grpc.v1" && $2 == "cri" && $NF == "ok" { found = 1 } END { exit(found ? 0 : 1) }' /tmp/ctr-plugins.txt
+  if command -v crictl >/dev/null; then
+    crictl --version
+    crictl --runtime-endpoint "unix://${CONTAINERD_ADDRESS}" --image-endpoint "unix://${CONTAINERD_ADDRESS}" info > /tmp/crictl-info.json
+    jq -e 'has("config") and has("status")' /tmp/crictl-info.json >/dev/null
+  else
+    echo "crictl not installed; skipping CRI info probe."
+  fi
+
+  grep -F 'runtime_type = "io.containerd.kata.v2"' /etc/containerd/config.toml
+  grep -F 'ConfigPath = "/etc/kata-containers/configuration.toml"' /etc/containerd/config.toml
+
+  nerdctl --address "${CONTAINERD_ADDRESS}" info > /tmp/nerdctl-info.txt
+  kata-runtime env > /tmp/kata-env.txt
+  grep -E '/etc/kata-containers/configuration.toml|/opt/kata/share/defaults/kata-containers/' /tmp/kata-env.txt
+
+  if should_print_kata_check_output; then
+    strace -f -o /tmp/kata-check.strace -s 256 kata-runtime check -v 2>&1 | tee /tmp/kata-check.txt || kata_check_status=$?
+  else
+    strace -f -o /tmp/kata-check.strace -s 256 kata-runtime check -v >/tmp/kata-check.txt 2>&1 || kata_check_status=$?
+  fi
+
+  if [ "${kata_check_status}" -ne 0 ]; then
+    summarize_kata_check_strace
+    echo "::warning title=kata-runtime check::kata-runtime check failed; continuing because the configured nerdctl workload is the hard gate."
+    emit_github_error "kata-runtime check" /tmp/kata-check.txt
+    emit_github_error "kata-runtime strace" /tmp/kata-check.strace.summary
+  fi
+}
+
+main() {
+  action="${1:-}"
+
+  case "${action}" in
+    -h | --help)
+      show_help
+      exit 0
+      ;;
+    install | check)
+      ;;
+    '')
+      echo "Missing command." >&2
+      echo >&2
+      show_help >&2
+      exit 1
+      ;;
+    *)
+      echo "Unsupported command: ${action}" >&2
+      echo >&2
+      show_help >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "$#" -ne 1 ]; then
+    echo "Unexpected arguments: ${*:2}" >&2
+    echo >&2
+    show_help >&2
+    exit 1
+  fi
+
+  kata_load_config "${script_dir}/config/smoke-test.env"
+
+  case "${action}" in
+    install)
+      run_install_task
+      ;;
+    check)
+      run_check_task
+      ;;
+  esac
+}
+
+main "$@"

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Switch the local `bash tools/kata/run_kata_smoke.sh` flow from `virtio-9p` to
+Switch the local `bash tools/kata/run_kata.sh smoke` flow from `virtio-9p` to
 `virtio-fs`, then find
 whether the resulting failure is caused by repo configuration, the local dev
 container environment, or Kata/QEMU/runtime behavior.
@@ -15,7 +15,7 @@ container environment, or Kata/QEMU/runtime behavior.
 
 ## Initial Verification
 
-- `bash tools/kata/run_kata_smoke.sh` installs
+- `bash tools/kata/run_kata.sh smoke` installs
   `tools/kata/config/kata-10-container.toml` as
   `/etc/kata-containers/config.d/10-container.toml`.
 - After the change, `kata-runtime env` reports:
@@ -31,12 +31,12 @@ container environment, or Kata/QEMU/runtime behavior.
 Command:
 
 ```bash
-bash tools/kata/run_kata_smoke.sh
+bash tools/kata/run_kata.sh smoke
 ```
 
 Result:
 
-- `bash tools/kata/run_kata_smoke.sh` fails after switching to `virtio-fs`.
+- `bash tools/kata/run_kata.sh smoke` fails after switching to `virtio-fs`.
 - `nerdctl` reports:
   - `failed to create shim task`
   - `timed out connecting to vsock <cid>:1024`
@@ -73,7 +73,7 @@ Result:
 - Added `file_mem_backend = "/tmp"` to
   `tools/kata/config/kata-10-container.toml` so Kata does not use `/dev/shm`
   for the shared guest memory backend during `virtio-fs` runs.
-- Next step: rerun `bash tools/kata/run_kata_smoke.sh` and verify whether the
+- Next step: rerun `bash tools/kata/run_kata.sh smoke` and verify whether the
   QEMU command line now uses `/tmp` and whether the Kata workload succeeds.
 
 ## Final Result
@@ -121,8 +121,8 @@ to:
 Successful runs after the fix:
 
 ```bash
-bash tools/kata/run_kata_smoke.sh
-KATA_PASSES=2 bash tools/kata/run_kata_smoke.sh
+bash tools/kata/run_kata.sh smoke
+KATA_PASSES=2 bash tools/kata/run_kata.sh smoke
 ```
 
 Observed success signal:
@@ -200,11 +200,11 @@ make kernel BOOT_METHOD=qemu-direct
 - Verified with:
 
 ```bash
-KATA_STATIC_TARBALL_URL= bash tools/kata/run_kata_smoke.sh
+KATA_STATIC_TARBALL_URL= bash tools/kata/run_kata.sh smoke
 ```
 
 - Result:
-  - `bash tools/kata/run_kata_smoke.sh` succeeds
+  - `bash tools/kata/run_kata.sh smoke` succeeds
   - `cat /etc/alpine-release` returns `3.10.2`
 
 ### Current Practical Status
@@ -224,7 +224,7 @@ KATA_STATIC_TARBALL_URL= bash tools/kata/run_kata_smoke.sh
 
 ### Implementation
 
-- Added static tarball cache support in `tools/kata/install_kata_env.sh`.
+- Added static tarball cache support in `tools/kata/kata_env.sh install`.
 - The helper now:
   - derives or reads a checksum source for the static tarball
   - resolves the current expected SHA256
@@ -270,10 +270,10 @@ This confirms:
 After the cache logic change, restored the real runnable setup and verified:
 
 ```bash
-KATA_STATIC_TARBALL_URL= bash tools/kata/run_kata_smoke.sh
+KATA_STATIC_TARBALL_URL= bash tools/kata/run_kata.sh smoke
 ```
 
 Result:
 
-- `bash tools/kata/run_kata_smoke.sh` succeeds
+- `bash tools/kata/run_kata.sh smoke` succeeds
 - `cat /etc/alpine-release` returns `3.10.2`
