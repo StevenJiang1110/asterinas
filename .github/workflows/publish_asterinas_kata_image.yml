@@ -1,0 +1,80 @@
+name: Publish Asterinas Kata Docker image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/publish_asterinas_kata_image.yml
+      - DOCKER_IMAGE_VERSION
+      - tools/docker/kata.Dockerfile
+      - tools/kata/config/smoke-test.env
+      - tools/kata/kata_env.sh
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish_asterinas_kata_image.yml
+      - DOCKER_IMAGE_VERSION
+      - tools/docker/kata.Dockerfile
+      - tools/kata/config/smoke-test.env
+      - tools/kata/kata_env.sh
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      image_version: ${{ steps.prepare.outputs.image_version }}
+      asterinas_kata_existed: ${{ steps.prepare.outputs.asterinas_kata_existed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            DOCKER_IMAGE_VERSION
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Resolve Docker image version
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_version="$(cat DOCKER_IMAGE_VERSION)"
+          echo "image_version=${image_version}" >> "${GITHUB_OUTPUT}"
+
+          docker manifest inspect "asterinas/asterinas:${image_version}" > /dev/null
+
+          if docker manifest inspect "asterinas/asterinas-kata:${image_version}" > /dev/null 2>&1; then
+            echo "asterinas_kata_existed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "asterinas_kata_existed=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+  publish_asterinas_kata_image:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.asterinas_kata_existed != 'true' }}
+    uses: docker/github-builder/.github/workflows/build.yml@v1
+    permissions:
+      contents: read
+      id-token: write # for cosign keyless signing of provenance attestations
+    with:
+      output: image
+      push: true
+      platforms: linux/amd64
+      context: .
+      file: ./tools/docker/kata.Dockerfile
+      meta-images: asterinas/asterinas-kata
+      meta-tags: |
+        type=raw,value=${{ needs.prepare.outputs.image_version }}
+      build-args: |
+        BASE_VERSION=${{ needs.prepare.outputs.image_version }}
+    secrets:
+      registry-auths: |
+        - registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
