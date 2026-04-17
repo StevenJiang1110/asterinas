@@ -24,3 +24,7 @@ The Docker images are tagged according to the version specified
 in the `DOCKER_IMAGE_VERSION` file at the project root.
 Check out the [version bump](https://asterinas.github.io/book/to-contribute/version-bump.html) documentation
 on how new versions of the Docker images are released.
+
+The repo also ships `tools/docker/kata.Dockerfile`, which builds
+`asterinas/asterinas-kata` on top of `asterinas/asterinas` and layers in the
+Kata smoke-test dependencies configured by `tools/kata/config/smoke-test.env`.
