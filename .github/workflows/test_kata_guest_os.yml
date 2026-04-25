@@ -1,0 +1,60 @@
+name: Test Kata Guest OS
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-kata-runtime-host:
+    runs-on: ubuntu-latest
+    container:
+      image: asterinas/asterinas:0.17.1-20260319
+      options: >-
+        --privileged
+        --cgroupns host
+        --tmpfs /tmp:exec,mode=1777,size=8g
+        --tmpfs /var/lib/containerd:exec,mode=755,size=8g
+    env:
+      KATA_CGROUP_NAMESPACE: host
+      KATA_GUEST_KERNEL: linux
+      KATA_STATIC_TARBALL_RELEASE_REPO: jjf-dev/kata-containers
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 90
+    steps:
+      - name: Check disk space
+        run: |
+          set -euxo pipefail
+          df -h
+          findmnt -no TARGET,FSTYPE,OPTIONS /tmp
+          findmnt -no TARGET,FSTYPE,OPTIONS /var/lib/containerd
+          stat -f -c '%T %n' /tmp /var/lib/containerd
+
+      - uses: actions/checkout@v4
+
+      - name: Check overlayfs staging prerequisites
+        run: |
+          set -euxo pipefail
+          bash tools/kata/check_overlayfs.sh
+
+      - name: Install Kata environment
+        run: |
+          set -euxo pipefail
+          bash tools/kata/kata_env.sh install
+
+      - name: Run Kata pass 1
+        run: |
+          set -euxo pipefail
+          bash tools/kata/run_kata.sh pass
+
+      - name: Run Kata pass 2
+        run: |
+          set -euxo pipefail
+          bash tools/kata/run_kata.sh pass
