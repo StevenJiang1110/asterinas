@@ -27,8 +27,22 @@ impl Read for BoxedReader<'_> {
     }
 }
 
-/// Unpack and prepare the rootfs from the initramfs CPIO buffer.
+/// Unpack and prepare the rootfs from the initramfs CPIO buffer if needed.
 pub fn init_in_first_kthread(path_resolver: &PathResolver) -> Result<()> {
+    let cmdline = boot_info().kernel_cmdline.as_str();
+
+    let is_virtiofs_root = cmdline
+        .split_whitespace()
+        .any(|arg| arg == "rootfs=virtiofs");
+    println!(
+        "[kernel] rootfs=virtiofs is {}specified in the kernel command line",
+        if is_virtiofs_root { "" } else { "not " }
+    );
+    println!("kernel_cmdline = {}", cmdline);
+    if is_virtiofs_root {
+        return Ok(());
+    }
+
     let initramfs_buf = boot_info()
         .initramfs
         .ok_or_else(|| Error::with_message(Errno::EINVAL, "no initramfs found"))?;
