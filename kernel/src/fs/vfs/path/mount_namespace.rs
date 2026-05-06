@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use alloc::string::{String, ToString};
+
+use ostd::boot::boot_info;
 use spin::Once;
 
 use super::{mount::MountNsFileCopying, try_get_mnt_ns_inode};
 use crate::{
     fs::{
-        fs_impls::ramfs::RamFs,
+        fs_impls::{ramfs::RamFs, virtiofs},
         pseudofs::{NsCommonOps, NsType, StashedDentry},
-        vfs::path::{Dentry, Mount, Path, PathResolver},
+        vfs::{
+            file_system::FileSystem,
+            path::{Dentry, Mount, Path, PathResolver},
+        },
     },
     prelude::*,
     process::{UserNamespace, credentials::capabilities::CapSet, posix_thread::PosixThread},
@@ -50,13 +56,23 @@ impl Ord for MountNamespace {
 
 impl MountNamespace {
     /// Returns a reference to the singleton initial mount namespace.
+    ///
+    /// If `rootfs=virtiofs` is specified in the kernel command line,
+    /// the mount namespace will use virtiofs as the root filesystem.
+    /// Otherwise, it will use ramfs (default behavior).
     #[doc(hidden)]
     pub fn get_init_singleton() -> &'static Arc<MountNamespace> {
         static INIT: Once<Arc<MountNamespace>> = Once::new();
 
+        let owner = UserNamespace::get_init_singleton().clone();
+
         INIT.call_once(|| {
-            let owner = UserNamespace::get_init_singleton().clone();
-            let rootfs = RamFs::new_rootfs();
+            let rootfs: Arc<dyn FileSystem> =
+                if let Some(virtiofs_tag) = get_virtiofs_tag_from_cmdline() {
+                    virtiofs::new(&virtiofs_tag).unwrap()
+                } else {
+                    RamFs::new_rootfs()
+                };
 
             Arc::new_cyclic(|weak_self| {
                 let root = Mount::new_root(rootfs, weak_self.clone());
@@ -216,4 +232,22 @@ impl NsCommonOps for MountNamespace {
     fn stashed_dentry(&self) -> &StashedDentry {
         &self.stashed_dentry
     }
+}
+
+fn get_virtiofs_tag_from_cmdline() -> Option<String> {
+    let cmdline = boot_info().kernel_cmdline.as_str();
+
+    for arg in cmdline.split_whitespace() {
+        if let Some(value) = arg.strip_prefix("rootfs=")
+            && value == "virtiofs"
+        {
+            for tag_arg in cmdline.split_whitespace() {
+                if let Some(tag) = tag_arg.strip_prefix("virtiofs_tag=") {
+                    return Some(tag.to_string());
+                }
+            }
+            return Some("share_folder".to_string());
+        }
+    }
+    None
 }
