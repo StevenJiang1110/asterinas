@@ -75,7 +75,7 @@ impl datagram_common::Bound for BoundNetlinkUevent {
 
             let remote = *response.src_addr();
 
-            let should_dequeue = !flags.contains(SendRecvFlags::MSG_PEEK);
+            let should_dequeue = flags.receive_behavior().consumes_data();
             Ok((should_dequeue, (len, remote)))
         })
     }

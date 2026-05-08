@@ -116,7 +116,7 @@ impl datagram_common::Bound for BoundNetlinkRoute {
             // TODO: The message can only come from kernel socket currently.
             let remote = NetlinkSocketAddr::new_unspecified();
 
-            let should_dequeue = !flags.contains(SendRecvFlags::MSG_PEEK);
+            let should_dequeue = flags.receive_behavior().consumes_data();
             Ok((should_dequeue, (len, remote)))
         })
     }
