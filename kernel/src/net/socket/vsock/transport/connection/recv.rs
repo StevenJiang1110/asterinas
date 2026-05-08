@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use aster_bigtcp::socket::ReceiveBehavior;
 use aster_virtio::device::socket::{header::VirtioVsockOp, packet::RxPacket};
 
 use crate::{
@@ -19,7 +20,7 @@ impl Connection {
     pub(in crate::net::socket::vsock) fn try_recv(
         &mut self,
         writer: &mut dyn MultiWrite,
-        _flags: SendRecvFlags,
+        flags: SendRecvFlags,
     ) -> Result<usize> {
         // We use a packet-pool approach here so a receive attempt either completes for the chosen
         // packets or leaves the receive queue unchanged.
@@ -50,13 +51,16 @@ impl Connection {
         // Packets can only be received from a `&mut connection`. Therefore, releasing the state
         // lock does not cause race conditions. We need to release the lock in order to copy to
         // userspace.
-        let result = packets.copy_to_userspace(writer);
+        let behavior = flags.receive_behavior();
+        let result = packets.copy_to_userspace(writer, behavior);
         let recv_len = *result.as_ref().unwrap_or(&0);
 
-        self.inner
-            .state
-            .lock()
-            .ungrab_packets_and_finish_recv(&self.inner, packets, recv_len);
+        let mut state = self.inner.state.lock();
+        if behavior.consumes_data() {
+            state.ungrab_packets_and_finish_recv(&self.inner, packets, recv_len);
+        } else {
+            state.undo_pop_rx_packets(packets);
+        }
 
         self.inner.pollee.invalidate();
 
@@ -70,7 +74,11 @@ struct PoppedRxPackets<'a> {
 }
 
 impl PoppedRxPackets<'_> {
-    fn copy_to_userspace(&mut self, writer: &mut dyn MultiWrite) -> Result<usize> {
+    fn copy_to_userspace(
+        &mut self,
+        writer: &mut dyn MultiWrite,
+        behavior: ReceiveBehavior,
+    ) -> Result<usize> {
         let mut read_offset = self.read_offset;
         let mut total_write_len = 0;
 
@@ -84,18 +92,22 @@ impl PoppedRxPackets<'_> {
             total_write_len += write_len;
 
             if payload.has_remain() {
-                read_offset += write_len;
-
-                self.skip_packets(i);
-                self.read_offset = read_offset;
+                if behavior.consumes_data() {
+                    read_offset += write_len;
+                    self.skip_packets(i);
+                    self.read_offset = read_offset;
+                }
                 return Ok(total_write_len);
             }
 
             read_offset = 0;
         }
 
-        self.packets = &mut [];
-        self.read_offset = 0;
+        if behavior.consumes_data() {
+            self.packets = &mut [];
+            self.read_offset = 0;
+        }
+
         Ok(total_write_len)
     }
 
