@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use core::fmt;
+use core::{fmt, mem};
 
+use aster_bigtcp::socket::ReceiveBehavior;
 use aster_rights::ReadOp;
 use ostd::task::Task;
 
@@ -273,10 +274,17 @@ impl AuxiliaryData {
     }
 
     /// Generates the control messages from the auxiliary data.
-    pub(super) fn generate_control(&mut self, is_pass_cred: bool) -> Vec<ControlMessage> {
-        let mut ctrl_msgs = Vec::new();
-
+    pub(super) fn generate_control(
+        &mut self,
+        behavior: ReceiveBehavior,
+        is_pass_cred: bool,
+    ) -> Vec<ControlMessage> {
         let Self { files, cred } = self;
+        let files = match behavior {
+            ReceiveBehavior::Recv => mem::take(files),
+            ReceiveBehavior::Peek => files.clone(),
+        };
+        let mut ctrl_msgs = Vec::new();
 
         if is_pass_cred {
             let unix_ctrl_msg = UnixControlMessage(Message::Cred(CredMessage {
@@ -289,9 +297,7 @@ impl AuxiliaryData {
         }
 
         if !files.is_empty() {
-            let unix_ctrl_msg = UnixControlMessage(Message::Files(FileMessage {
-                files: core::mem::take(files),
-            }));
+            let unix_ctrl_msg = UnixControlMessage(Message::Files(FileMessage { files }));
             ctrl_msgs.push(ControlMessage::Unix(unix_ctrl_msg));
         }
 

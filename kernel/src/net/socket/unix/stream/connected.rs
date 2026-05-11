@@ -5,6 +5,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+use aster_bigtcp::socket::ReceiveBehavior;
 use spin::Once;
 
 use crate::{
@@ -14,7 +15,7 @@ use crate::{
         unix::{
             UnixSocketAddr, addr::UnixSocketAddrBound, cred::SocketCred, ctrl_msg::AuxiliaryData,
         },
-        util::{ControlMessage, SockShutdownCmd},
+        util::{ControlMessage, SendRecvFlags, SockShutdownCmd},
     },
     prelude::*,
     process::signal::Pollee,
@@ -117,6 +118,7 @@ impl Connected {
         &self,
         writer: &mut dyn MultiWrite,
         is_seqpacket: bool,
+        flags: SendRecvFlags,
     ) -> Result<(usize, Vec<ControlMessage>)> {
         let is_empty = writer.is_empty();
         if is_empty && !is_seqpacket {
@@ -135,14 +137,15 @@ impl Connected {
         let no_aux_len = reader.len();
 
         let is_pass_cred = this_end.is_pass_cred.load(Ordering::Relaxed);
+        let behavior = flags.receive_behavior();
 
         // Fast path: There are no auxiliary data to receive.
         if !peer_end.has_aux.load(Ordering::Relaxed) {
             let read_len = self
                 .inner
-                .read_with(move || reader.read_fallible_with_max_len(writer, no_aux_len))?;
+                .read_with(move || read_with_behavior(&mut reader, writer, no_aux_len, behavior))?;
             let ctrl_msgs = if is_pass_cred {
-                AuxiliaryData::default().generate_control(is_pass_cred)
+                AuxiliaryData::default().generate_control(behavior, is_pass_cred)
             } else {
                 Vec::new()
             };
@@ -150,6 +153,7 @@ impl Connected {
         }
 
         let mut all_aux = peer_end.all_aux.lock();
+
         let mut aux_prev_data: Option<AuxiliaryData> = None;
         let mut read_tot_len = 0;
 
@@ -181,7 +185,7 @@ impl Connected {
             // Read the payload bytes of the current auxiliary data.
             let read_res = if !is_empty && aux_len > 0 {
                 self.inner
-                    .read_with(|| reader.read_fallible_with_max_len(writer, aux_len))
+                    .read_with(|| read_with_behavior(&mut reader, writer, aux_len, behavior))
             } else {
                 Ok(0)
             };
@@ -191,6 +195,15 @@ impl Connected {
                 Err(err) => return Err(err),
             };
             read_tot_len += read_len;
+
+            if !behavior.consumes_data() {
+                if let Some(front) = aux_front {
+                    break &mut front.data;
+                }
+
+                aux_prev_data = Some(AuxiliaryData::default());
+                break aux_prev_data.as_mut().unwrap();
+            }
 
             // Record the current auxiliary data. Break if the read is incomplete or this is a
             // `SOCK_SEQPACKET` socket.
@@ -217,7 +230,7 @@ impl Connected {
 
         drop(reader);
 
-        let ctrl_msgs = aux_data.generate_control(is_pass_cred);
+        let ctrl_msgs = aux_data.generate_control(behavior, is_pass_cred);
         debug_assert!(is_seqpacket || read_tot_len != 0);
         peer_end
             .has_aux
@@ -385,6 +398,18 @@ struct RangedAuxiliaryData {
     data: AuxiliaryData,
     start: Wrapping<usize>, // inclusive
     end: Wrapping<usize>,   // exclusive
+}
+
+fn read_with_behavior(
+    reader: &mut RbConsumer<u8>,
+    writer: &mut dyn MultiWrite,
+    max_len: usize,
+    behavior: ReceiveBehavior,
+) -> Result<usize> {
+    match behavior {
+        ReceiveBehavior::Recv => reader.read_fallible_with_max_len(writer, max_len),
+        ReceiveBehavior::Peek => reader.peek_fallible_with_max_len(writer, max_len),
+    }
 }
 
 pub(in crate::net) const UNIX_STREAM_DEFAULT_BUF_SIZE: usize = 65536;
