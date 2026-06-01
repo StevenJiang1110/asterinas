@@ -50,6 +50,7 @@ pub use self::{
         read::{ReadOperation, ReadReq},
         readdir::ReaddirOperation,
         readlink::{MAX_READLINK_LEN, ReadlinkOperation},
+        rename::{RenameOperation, RenameReq},
         release::{ReleaseFlags, ReleaseKind, ReleaseOperation, ReleaseReq},
         rmdir::RmdirOperation,
         setattr::{SetattrOperation, SetattrReq, SetattrValid},

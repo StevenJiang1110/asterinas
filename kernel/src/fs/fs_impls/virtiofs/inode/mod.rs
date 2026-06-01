@@ -21,6 +21,7 @@ use aster_fuse::{
         mknod::{MknodOperation, MknodReq},
         open::{OpenReq, OpendirOperation},
         release::ReleaseOptions,
+        rename::{RenameOperation, RenameReq},
         rmdir::RmdirOperation,
         unlink::UnlinkOperation,
     },
@@ -382,6 +383,26 @@ impl Inode for VirtioFsInode {
         let fs = self.fs_ref();
         fs.session()
             .do_fuse_op(self.nodeid(), RmdirOperation::new(name))?;
+        Ok(())
+    }
+
+    fn rename(&self, old_name: &str, target: &Arc<dyn Inode>, new_name: &str) -> Result<()> {
+        let target = target
+            .downcast_ref::<VirtioFsInode>()
+            .ok_or_else(|| Error::with_message(Errno::EXDEV, "not same fs"))?;
+
+        if self.type_() != InodeType::Dir || target.type_() != InodeType::Dir {
+            return_errno_with_message!(Errno::ENOTDIR, "rename parent is not a directory");
+        }
+
+        let fs = self.fs_ref();
+        fs.session().do_fuse_op(
+            self.nodeid(),
+            RenameOperation::new(RenameReq::new(target.nodeid()), old_name, new_name),
+        )?;
+        self.expire_attr_cache();
+        target.expire_attr_cache();
+
         Ok(())
     }
 
