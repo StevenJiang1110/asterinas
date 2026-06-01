@@ -76,9 +76,17 @@ impl PageCacheBackend for VirtioFsInode {
     ) -> Result<()> {
         locked_page.wait_until_finish_writing_back();
 
+        let offset = page_offset(idx)?;
+        let file_size = self.size();
+        if offset >= file_size {
+            return Ok(());
+        }
+
+        let write_len = (file_size - offset).min(PAGE_SIZE);
         let fs = self.fs_ref();
-        let data_buf = fs.session().alloc_write_buf(PAGE_SIZE)?;
-        let page_reader = locked_page.reader();
+        let data_buf = fs.session().alloc_write_buf(write_len)?;
+        let mut page_reader = locked_page.reader();
+        page_reader.limit(write_len);
 
         data_buf
             .writer()
@@ -105,8 +113,8 @@ impl PageCacheBackend for VirtioFsInode {
         let complete_page = page.clone();
         let write_req = WriteReq::new(
             handle.fh(),
-            page_offset(idx)? as u64,
-            PAGE_SIZE as u32,
+            offset as u64,
+            write_len as u32,
             handle.file_flags(),
             WriteFlags::empty(),
         );
