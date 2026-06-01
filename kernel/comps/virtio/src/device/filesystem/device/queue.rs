@@ -19,7 +19,10 @@ use smallvec::SmallVec;
 use spin::Once;
 
 use super::request::FuseRequest;
-use crate::{device::filesystem::pool::FsDmaStorage, queue::VirtQueue};
+use crate::{
+    device::filesystem::pool::FsDmaStorage,
+    queue::{AddBufsError, VirtQueue},
+};
 
 /// A virtio-fs request queue and its in-flight request state.
 pub(super) struct FsRequestQueue {
@@ -73,7 +76,7 @@ impl FsRequestQueue {
     }
 
     /// Submits a FUSE request to the virtqueue.
-    pub(super) fn add_request(&self, request: FuseRequest) {
+    pub(super) fn add_request(&self, request: FuseRequest) -> Result<(), AddBufsError> {
         let mut inner = self.inner.lock();
         let token = {
             let request_bufs = request
@@ -90,8 +93,7 @@ impl FsRequestQueue {
 
             inner
                 .queue
-                .add_dma_bufs(request_bufs.as_slice(), reply_bufs.as_slice())
-                .unwrap()
+                .add_dma_bufs(request_bufs.as_slice(), reply_bufs.as_slice())?
         };
 
         inner.in_flight_requests.put_at(token as usize, request);
@@ -99,6 +101,8 @@ impl FsRequestQueue {
         if inner.queue.should_notify() {
             inner.queue.notify();
         }
+
+        Ok(())
     }
 
     /// Moves completed virtqueue descriptors into the pending-completion list.

@@ -701,11 +701,18 @@ impl<'a> BackedVmo<'a> {
         let dirty_pages =
             self.collect_pages_if(locked_pages, page_idx_range, |_, page| page.is_dirty());
 
-        let mut io_batch = IoBatch::with_capacity(dirty_pages.len());
+        const MAX_WRITEBACK_BATCH: usize = 16;
+
+        let mut io_batch = IoBatch::with_capacity(dirty_pages.len().min(MAX_WRITEBACK_BATCH));
         for (idx, page) in dirty_pages {
             let locked_page = page.lock();
             self.backend
                 .write_page_async(idx, locked_page, &mut io_batch)?;
+
+            if io_batch.len() >= MAX_WRITEBACK_BATCH {
+                io_batch.wait_all().map_err(Error::from)?;
+                io_batch = IoBatch::with_capacity(MAX_WRITEBACK_BATCH);
+            }
         }
 
         io_batch.wait_all().map_err(Into::into)

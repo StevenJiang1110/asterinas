@@ -35,6 +35,7 @@ use waiter::{FuseWaiter, ReplyBufs};
 pub use self::session::{AttrVersion, FuseSession};
 use crate::{
     device::filesystem::pool::{FuseDataBuf, FuseReplyBuf, FuseRequestBuf, SizeClassedDmaPool},
+    queue::AddBufsError,
     transport::VirtioTransport,
 };
 
@@ -100,7 +101,7 @@ impl FileSystemDevice {
         let waiter = request.waiter().clone();
 
         let queue = self.select_request_queue(request.nodeid());
-        self.submit(queue, request);
+        self.submit(queue, request)?;
 
         Ok(waiter)
     }
@@ -176,8 +177,12 @@ impl FileSystemDevice {
         FuseUnique::new(self.next_unique.fetch_add(1, Ordering::Relaxed))
     }
 
-    fn submit(&self, request_queue: &FsRequestQueue, request: FuseRequest) {
-        request_queue.add_request(request);
+    fn submit(
+        &self,
+        request_queue: &FsRequestQueue,
+        request: FuseRequest,
+    ) -> Result<(), FuseError> {
+        request_queue.add_request(request).map_err(fuse_error_from_add_bufs)
     }
 
     fn alloc_and_fill_request_buf(
@@ -276,4 +281,11 @@ pub fn find_device_by_tag(tag: &str) -> Option<Arc<FileSystemDevice>> {
 const HIPRIO_QUEUE_INDEX: u16 = 0;
 
 /// The default queue size for any queue in virtio-fs.
+fn fuse_error_from_add_bufs(err: AddBufsError) -> FuseError {
+    match err {
+        AddBufsError::InvalidArgs => FuseError::ResourceAlloc(ostd::Error::InvalidArgs),
+        AddBufsError::BufferTooSmall => FuseError::ResourceAlloc(ostd::Error::NotEnoughResources),
+    }
+}
+
 const DEFAULT_QUEUE_SIZE: u16 = 128;
