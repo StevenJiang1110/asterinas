@@ -15,6 +15,8 @@ pub mod printer;
 pub mod ranged_integer;
 pub mod read_cstring;
 pub mod safe_ptr;
+pub mod sg_buf;
 pub mod slot_vec;
 
 pub use read_cstring::ReadCString;
+pub use sg_buf::{MultiRead, MultiWrite};
