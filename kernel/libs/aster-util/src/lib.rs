@@ -13,5 +13,8 @@ pub mod mem_obj_slice;
 pub mod per_cpu_counter;
 pub mod printer;
 pub mod ranged_integer;
+pub mod read_cstring;
 pub mod safe_ptr;
 pub mod slot_vec;
+
+pub use read_cstring::ReadCString;
