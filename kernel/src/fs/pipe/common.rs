@@ -25,7 +25,7 @@ use crate::{
     },
     util::{
         ioctl::{RawIoctl, dispatch_ioctl},
-        ring_buffer::{ConsumerU8Ext, ProducerU8Ext, RbConsumer, RbProducer, RingBuffer},
+        ring_buffer::{RbConsumer, RbProducer, RingBuffer},
     },
 };
 
@@ -401,7 +401,7 @@ impl PipeReader {
     fn try_read(&self, writer: &mut VmWriter) -> Result<usize> {
         let read = || {
             let mut consumer = self.consumer.lock();
-            consumer.read_fallible(writer)
+            Ok(consumer.read_fallible(writer)?)
         };
 
         self.state.read_with(read)
@@ -458,7 +458,7 @@ impl PipeWriter {
                 // No sufficient space for an atomic write
                 return Ok(0);
             }
-            producer.write_fallible(reader)
+            Ok(producer.write_fallible(reader)?)
         };
 
         let res = self.state.write_with(write);

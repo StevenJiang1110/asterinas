@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use ostd::prelude::ktest;
+use ostd::{
+    mm::{VmReader, VmWriter},
+    prelude::ktest,
+};
 
 use super::*;
 
@@ -49,8 +52,6 @@ fn rb_write_read_one() {
 
 #[ktest]
 fn rb_write_read_all() {
-    use ostd::mm::PAGE_SIZE;
-
     let rb = RingBuffer::<u8>::new(4 * PAGE_SIZE);
     assert_eq!(rb.capacity(), 4 * PAGE_SIZE);
 
@@ -78,4 +79,77 @@ fn rb_write_read_all() {
         assert_eq!(output[step - 1], i as u8);
     }
     assert!(prod.is_empty());
+}
+
+#[ktest]
+fn rb_write_read_one_with_vm_io() {
+    let rb = RingBuffer::<u8>::new(1);
+
+    let (mut prod, mut cons) = rb.split();
+
+    let input = [u8::MAX];
+    assert_eq!(
+        prod.write_fallible(&mut reader_from(input.as_slice()))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        prod.write_fallible(&mut reader_from(input.as_slice()))
+            .unwrap(),
+        0
+    );
+    assert_eq!(prod.len(), 1);
+
+    let mut output = [0u8];
+    assert_eq!(
+        cons.read_fallible(&mut writer_from(output.as_mut_slice()))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        cons.read_fallible(&mut writer_from(output.as_mut_slice()))
+            .unwrap(),
+        0
+    );
+    assert_eq!(cons.free_len(), 1);
+
+    assert_eq!(output, input);
+}
+
+#[ktest]
+fn rb_write_read_all_with_vm_io() {
+    let rb = RingBuffer::<u8>::new(4 * PAGE_SIZE);
+    assert_eq!(rb.capacity(), 4 * PAGE_SIZE);
+
+    let (mut prod, mut cons) = rb.split();
+
+    let step = 128;
+    let mut input = alloc::vec![0u8; step];
+    for i in (0..4 * PAGE_SIZE).step_by(step) {
+        input.fill(i as _);
+        let write_len = prod
+            .write_fallible(&mut reader_from(input.as_slice()))
+            .unwrap();
+        assert_eq!(write_len, step);
+    }
+    assert!(cons.is_full());
+
+    let mut output = alloc::vec![0u8; step];
+    for i in (0..4 * PAGE_SIZE).step_by(step) {
+        let read_len = cons
+            .read_fallible(&mut writer_from(output.as_mut_slice()))
+            .unwrap();
+        assert_eq!(read_len, step);
+        assert_eq!(output[0], i as u8);
+        assert_eq!(output[step - 1], i as u8);
+    }
+    assert!(prod.is_empty());
+}
+
+fn reader_from(buf: &[u8]) -> VmReader<'_> {
+    VmReader::from(buf).to_fallible()
+}
+
+fn writer_from(buf: &mut [u8]) -> VmWriter<'_> {
+    VmWriter::from(buf).to_fallible()
 }

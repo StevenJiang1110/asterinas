@@ -1634,6 +1634,7 @@ dependencies = [
 name = "ring-buffer"
 version = "0.1.0"
 dependencies = [
+ "aster-util",
  "inherit-methods-macro",
  "ostd",
  "ostd-pod",

@@ -20,7 +20,7 @@ use crate::{
     process::signal::Pollee,
     util::{
         MultiRead, MultiWrite,
-        ring_buffer::{ConsumerU8Ext, ProducerU8Ext, RbConsumer, RbProducer, RingBuffer},
+        ring_buffer::{RbConsumer, RbProducer, RingBuffer},
     },
 };
 
@@ -140,7 +140,7 @@ impl Connected {
         if !peer_end.has_aux.load(Ordering::Relaxed) {
             let read_len = self
                 .inner
-                .read_with(move || reader.read_fallible_with_max_len(writer, no_aux_len))?;
+                .read_with(move || Ok(reader.read_fallible_with_max_len(writer, no_aux_len)?))?;
             let ctrl_msgs = if is_pass_cred {
                 AuxiliaryData::default().generate_control(is_pass_cred)
             } else {
@@ -181,7 +181,7 @@ impl Connected {
             // Read the payload bytes of the current auxiliary data.
             let read_res = if !is_empty && aux_len > 0 {
                 self.inner
-                    .read_with(|| reader.read_fallible_with_max_len(writer, aux_len))
+                    .read_with(|| Ok(reader.read_fallible_with_max_len(writer, aux_len)?))
             } else {
                 Ok(0)
             };
@@ -257,7 +257,7 @@ impl Connected {
                 if is_seqpacket && writer.free_len() < reader.sum_lens() {
                     return Ok(0);
                 }
-                writer.write_fallible(reader)
+                Ok(writer.write_fallible(reader)?)
             });
         }
 
@@ -275,7 +275,7 @@ impl Connected {
                 if is_seqpacket && writer.free_len() < reader.sum_lens() {
                     return Ok(0);
                 }
-                writer.write_fallible(reader)
+                Ok(writer.write_fallible(reader)?)
             });
             (write_start, write_res)
         } else {

@@ -12,6 +12,7 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+use aster_util::{MultiRead, MultiWrite};
 use inherit_methods_macro::inherit_methods;
 use ostd::mm::{FrameAllocOptions, PAGE_SIZE, Segment, VmIo, io::util::HasVmReaderWriter};
 use ostd_pod::Pod;
@@ -375,6 +376,65 @@ impl<T, R: Deref<Target = RingBuffer<T>>> Producer<T, R> {
     }
 }
 
+impl<R: Deref<Target = RingBuffer<u8>>> Producer<u8, R> {
+    /// Writes data from `reader` to the ring buffer.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_fallible(&mut self, reader: &mut dyn MultiRead) -> ostd::Result<usize> {
+        self.write_fallible_with_max_len(reader, usize::MAX)
+    }
+
+    /// Writes up to `max_len` bytes from `reader` to the ring buffer.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_fallible_with_max_len(
+        &mut self,
+        reader: &mut dyn MultiRead,
+        max_len: usize,
+    ) -> ostd::Result<usize> {
+        let free_len = self.free_len().min(max_len);
+
+        let tail = self.tail();
+        let offset = tail.0 & (self.capacity() - 1);
+
+        let write_result = if offset + free_len > self.capacity() {
+            let first_len = self.capacity() - offset;
+
+            let mut writer = self.segment().writer();
+            writer.skip(offset).limit(first_len);
+            let first_write_len = match reader.read(&mut writer) {
+                Ok(write_len) => write_len,
+                Err((err, write_len)) => {
+                    self.commit_write(write_len);
+                    return Err(err);
+                }
+            };
+
+            let mut writer = self.segment().writer();
+            writer.limit(free_len - first_len);
+            reader
+                .read(&mut writer)
+                .map(|second_write_len| first_write_len + second_write_len)
+                .map_err(|(err, second_write_len)| (err, first_write_len + second_write_len))
+        } else {
+            let mut writer = self.segment().writer();
+            writer.skip(offset).limit(free_len);
+            reader.read(&mut writer)
+        };
+
+        match write_result {
+            Ok(write_len) => {
+                self.commit_write(write_len);
+                Ok(write_len)
+            }
+            Err((err, write_len)) => {
+                self.commit_write(write_len);
+                Err(err)
+            }
+        }
+    }
+}
+
 impl<T: Pod, R: Deref<Target = RingBuffer<T>>> Consumer<T, R> {
     const T_SIZE: usize = size_of::<T>();
 
@@ -482,6 +542,65 @@ impl<T, R: Deref<Target = RingBuffer<T>>> Consumer<T, R> {
         );
         let head = self.head();
         self.rb.advance_head(head, len);
+    }
+}
+
+impl<R: Deref<Target = RingBuffer<u8>>> Consumer<u8, R> {
+    /// Reads data from the ring buffer into `writer`.
+    ///
+    /// Returns the number of bytes read.
+    pub fn read_fallible(&mut self, writer: &mut dyn MultiWrite) -> ostd::Result<usize> {
+        self.read_fallible_with_max_len(writer, usize::MAX)
+    }
+
+    /// Reads up to `max_len` bytes from the ring buffer into `writer`.
+    ///
+    /// Returns the number of bytes read.
+    pub fn read_fallible_with_max_len(
+        &mut self,
+        writer: &mut dyn MultiWrite,
+        max_len: usize,
+    ) -> ostd::Result<usize> {
+        let len = self.len().min(max_len);
+
+        let head = self.head();
+        let offset = head.0 & (self.capacity() - 1);
+
+        let read_result = if offset + len > self.capacity() {
+            let first_len = self.capacity() - offset;
+
+            let mut reader = self.segment().reader();
+            reader.skip(offset).limit(first_len);
+            let first_read_len = match writer.write(&mut reader) {
+                Ok(read_len) => read_len,
+                Err((err, read_len)) => {
+                    self.commit_read(read_len);
+                    return Err(err);
+                }
+            };
+
+            let mut reader = self.segment().reader();
+            reader.limit(len - first_len);
+            writer
+                .write(&mut reader)
+                .map(|second_read_len| first_read_len + second_read_len)
+                .map_err(|(err, second_read_len)| (err, first_read_len + second_read_len))
+        } else {
+            let mut reader = self.segment().reader();
+            reader.skip(offset).limit(len);
+            writer.write(&mut reader)
+        };
+
+        match read_result {
+            Ok(read_len) => {
+                self.commit_read(read_len);
+                Ok(read_len)
+            }
+            Err((err, read_len)) => {
+                self.commit_read(read_len);
+                Err(err)
+            }
+        }
     }
 }
 
