@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use aster_util::{MultiRead, MultiWrite};
 use ostd::{
     Error as OstdError,
     mm::{Infallible, VmSpace},
@@ -172,63 +173,6 @@ impl<'a> VmWriterArray<'a> {
     }
 }
 
-/// Trait defining the read behavior for a collection of [`VmReader`]s.
-pub trait MultiRead: ReadCString {
-    /// Reads the exact number of bytes required to exhaust `self` or fill `writer`,
-    /// accumulating total bytes read.
-    ///
-    /// If the return value is `Ok(n)`,
-    /// then `n` should be `min(self.sum_lens(), writer.avail())`.
-    ///
-    /// # Errors
-    ///
-    /// This method returns [`OstdError::PageFault`] if a page fault occurs, along with
-    /// the number of bytes copied before the error occurs. When an error is returned,
-    /// both `self` and `writer` are advanced by the returned byte count.
-    fn read(&mut self, writer: &mut VmWriter<'_, Infallible>) -> Result<usize, (OstdError, usize)>;
-
-    /// Calculates the total length of data remaining to read.
-    fn sum_lens(&self) -> usize;
-
-    /// Checks if the data remaining to read is empty.
-    fn is_empty(&self) -> bool {
-        self.sum_lens() == 0
-    }
-
-    /// Skips the first `nbytes` bytes of data, or skips to the end if the readers have
-    /// insufficient bytes.
-    fn skip_some(&mut self, nbytes: usize);
-}
-
-/// Trait defining the write behavior for a collection of [`VmWriter`]s.
-pub trait MultiWrite {
-    /// Writes the exact number of bytes required to exhaust `writer` or fill `self`,
-    /// accumulating total bytes read.
-    ///
-    /// If the return value is `Ok(n)`,
-    /// then `n` should be `min(self.sum_lens(), reader.remain())`.
-    ///
-    /// # Errors
-    ///
-    /// This method returns [`OstdError::PageFault`] if a page fault occurs, along with
-    /// the number of bytes copied before the error occurs. When an error is returned,
-    /// both `self` and `reader` are advanced by the returned byte count.
-    fn write(&mut self, reader: &mut VmReader<'_, Infallible>)
-    -> Result<usize, (OstdError, usize)>;
-
-    /// Calculates the length of space available to write.
-    fn sum_lens(&self) -> usize;
-
-    /// Checks if the space available to write is empty.
-    fn is_empty(&self) -> bool {
-        self.sum_lens() == 0
-    }
-
-    /// Skips the first `nbytes` bytes of data, or skips to the end if the writers have
-    /// insufficient bytes.
-    fn skip_some(&mut self, nbytes: usize);
-}
-
 impl MultiRead for VmReaderArray<'_> {
     fn read(&mut self, writer: &mut VmWriter<'_, Infallible>) -> Result<usize, (OstdError, usize)> {
         let mut total_len = 0;
@@ -258,34 +202,6 @@ impl MultiRead for VmReaderArray<'_> {
             if nbytes == 0 {
                 return;
             }
-        }
-    }
-}
-
-impl MultiRead for VmReader<'_> {
-    fn read(&mut self, writer: &mut VmWriter<'_, Infallible>) -> Result<usize, (OstdError, usize)> {
-        self.read_fallible(writer)
-    }
-
-    fn sum_lens(&self) -> usize {
-        self.remain()
-    }
-
-    fn skip_some(&mut self, nbytes: usize) {
-        self.skip(self.remain().min(nbytes));
-    }
-}
-
-impl dyn MultiRead + '_ {
-    /// Reads a `T` value, returning a `None` if the readers have insufficient bytes.
-    pub fn read_val_opt<T: Pod>(&mut self) -> Result<Option<T>> {
-        let mut val = T::new_zeroed();
-        let nbytes = self.read(&mut VmWriter::from(val.as_mut_bytes()))?;
-
-        if nbytes == size_of::<T>() {
-            Ok(Some(val))
-        } else {
-            Ok(None)
         }
     }
 }
@@ -323,32 +239,5 @@ impl MultiWrite for VmWriterArray<'_> {
                 return;
             }
         }
-    }
-}
-
-impl MultiWrite for VmWriter<'_> {
-    fn write(
-        &mut self,
-        reader: &mut VmReader<'_, Infallible>,
-    ) -> Result<usize, (OstdError, usize)> {
-        self.write_fallible(reader)
-    }
-
-    fn sum_lens(&self) -> usize {
-        self.avail()
-    }
-
-    fn skip_some(&mut self, nbytes: usize) {
-        self.skip(self.avail().min(nbytes));
-    }
-}
-
-impl dyn MultiWrite + '_ {
-    /// Writes a `T` value, truncating the value if the writers have insufficient bytes.
-    pub fn write_val_trunc<T: Pod>(&mut self, val: &T) -> Result<()> {
-        let _nbytes = self.write(&mut VmReader::from(val.as_bytes()))?;
-        // `_nbytes` may be smaller than the value size. We ignore it to truncate the value.
-
-        Ok(())
     }
 }

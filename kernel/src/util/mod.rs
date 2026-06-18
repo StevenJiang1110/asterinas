@@ -9,7 +9,7 @@ pub mod random;
 mod read_cstring;
 pub mod ring_buffer;
 
+pub use aster_util::{MultiRead, MultiWrite, ReadCString};
 pub use copy_compact::CopyCompat;
-pub use iovec::{MultiRead, MultiWrite, VmReaderArray, VmWriterArray};
+pub use iovec::{VmReaderArray, VmWriterArray};
 pub use padded::padded;
-pub use read_cstring::ReadCString;
