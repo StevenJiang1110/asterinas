@@ -107,6 +107,23 @@ bitflags! {
     }
 }
 
+impl DeleteRequestFlags {
+    /// Supported modifiers for DELETE requests.
+    pub const SUPPORTED: Self = Self::empty();
+
+    /// Checks whether all flags are supported.
+    pub fn check_unsupported(self) -> Result<()> {
+        if !(self - Self::SUPPORTED).is_empty() {
+            return_errno_with_message!(
+                Errno::EOPNOTSUPP,
+                "the delete request flags are not supported"
+            );
+        }
+
+        Ok(())
+    }
+}
+
 bitflags! {
     /// Flags for ACK messages.
     ///
