@@ -38,6 +38,7 @@ pub mod route;
 
 use addr::AddrSegment;
 use link::LinkSegment;
+use route::RouteSegment;
 
 use crate::{
     net::socket::netlink::message::{
@@ -54,6 +55,9 @@ pub enum RtnlSegment {
     GetLink(LinkSegment),
     NewAddr(AddrSegment),
     GetAddr(AddrSegment),
+    NewRoute(RouteSegment),
+    DelRoute(RouteSegment),
+    GetRoute(RouteSegment),
     Done(DoneSegment),
     Error(ErrorSegment),
 }
@@ -67,6 +71,9 @@ impl ProtocolSegment for RtnlSegment {
             RtnlSegment::NewAddr(addr_segment) | RtnlSegment::GetAddr(addr_segment) => {
                 addr_segment.header()
             }
+            RtnlSegment::NewRoute(route_segment)
+            | RtnlSegment::DelRoute(route_segment)
+            | RtnlSegment::GetRoute(route_segment) => route_segment.header(),
             RtnlSegment::Done(done_segment) => done_segment.header(),
             RtnlSegment::Error(error_segment) => error_segment.header(),
         }
@@ -80,6 +87,9 @@ impl ProtocolSegment for RtnlSegment {
             RtnlSegment::NewAddr(addr_segment) | RtnlSegment::GetAddr(addr_segment) => {
                 addr_segment.header_mut()
             }
+            RtnlSegment::NewRoute(route_segment)
+            | RtnlSegment::DelRoute(route_segment)
+            | RtnlSegment::GetRoute(route_segment) => route_segment.header_mut(),
             RtnlSegment::Done(done_segment) => done_segment.header_mut(),
             RtnlSegment::Error(error_segment) => error_segment.header_mut(),
         }
@@ -96,6 +106,15 @@ impl ProtocolSegment for RtnlSegment {
             }
             Ok(CSegmentType::GETADDR) => {
                 AddrSegment::read_from(&header, reader)?.map(RtnlSegment::GetAddr)
+            }
+            Ok(CSegmentType::GETROUTE) => {
+                RouteSegment::read_from(&header, reader)?.map(RtnlSegment::GetRoute)
+            }
+            Ok(CSegmentType::NEWROUTE) => {
+                RouteSegment::read_from(&header, reader)?.map(RtnlSegment::NewRoute)
+            }
+            Ok(CSegmentType::DELROUTE) => {
+                RouteSegment::read_from(&header, reader)?.map(RtnlSegment::DelRoute)
             }
             _ => {
                 let payload_len = header.calc_payload_len_with_padding(reader)?;
@@ -114,9 +133,13 @@ impl ProtocolSegment for RtnlSegment {
         match self {
             RtnlSegment::NewLink(link_segment) => link_segment.write_to(writer)?,
             RtnlSegment::NewAddr(addr_segment) => addr_segment.write_to(writer)?,
+            RtnlSegment::NewRoute(route_segment) => route_segment.write_to(writer)?,
             RtnlSegment::Done(done_segment) => done_segment.write_to(writer)?,
             RtnlSegment::Error(error_segment) => error_segment.write_to(writer)?,
-            RtnlSegment::GetAddr(_) | RtnlSegment::GetLink(_) => {
+            RtnlSegment::DelRoute(_)
+            | RtnlSegment::GetAddr(_)
+            | RtnlSegment::GetLink(_)
+            | RtnlSegment::GetRoute(_) => {
                 unreachable!("kernel should not write get requests to user space");
             }
         }

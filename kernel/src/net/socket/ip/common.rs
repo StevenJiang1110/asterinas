@@ -3,12 +3,13 @@
 use aster_bigtcp::{
     errors::BindError,
     iface::BindPortConfig,
-    wire::{IpAddress, IpEndpoint},
+    wire::{IpAddress, IpEndpoint, Ipv4Address},
 };
 
 use crate::{
     net::{
-        iface::{Iface, iter_all_ifaces, loopback_iface, virtio_iface},
+        iface::{self, Iface},
+        route::{self, RouteLookupKey, RouteType},
         socket::util::check_port_privilege,
     },
     prelude::*,
@@ -16,57 +17,62 @@ use crate::{
 
 fn get_iface_to_bind(ip_addr: &IpAddress) -> Option<Arc<Iface>> {
     match *ip_addr {
-        IpAddress::Ipv4(ipv4_addr) => iter_all_ifaces()
+        IpAddress::Ipv4(ipv4_addr) => iface::iter_all_ifaces()
             .find(|iface| iface.ipv4_addr().is_some_and(|addr| addr == ipv4_addr))
             .map(Clone::clone),
-        IpAddress::Ipv6(ipv6_addr) => iter_all_ifaces()
+        IpAddress::Ipv6(ipv6_addr) => iface::iter_all_ifaces()
             .find(|iface| iface.ipv6_addr().is_some_and(|addr| addr == ipv6_addr))
             .map(Clone::clone),
     }
 }
 
-/// Get a suitable iface to deal with sendto/connect request if the socket is not bound to an iface.
-/// If the remote address is the same as that of some iface, we will use the iface.
-/// Otherwise, we will use a default interface.
-fn get_ephemeral_iface(remote_ip_addr: &IpAddress) -> Arc<Iface> {
-    match remote_ip_addr {
-        IpAddress::Ipv4(remote_ipv4_addr) => {
-            if let Some(iface) = iter_all_ifaces().find(|iface| {
-                iface
-                    .ipv4_addr()
-                    .is_some_and(|addr| addr == *remote_ipv4_addr)
-            }) {
-                return iface.clone();
-            }
-
-            // FIXME: Instead of hardcoding the rules here, we should choose the
-            // default interface according to the routing table.
-            if let Some(virtio_iface) = virtio_iface() {
-                virtio_iface.clone()
-            } else {
-                loopback_iface().clone()
-            }
-        }
-        IpAddress::Ipv6(remote_ipv6_addr) => {
-            if let Some(iface) = iter_all_ifaces().find(|iface| {
-                iface
-                    .ipv6_addr()
-                    .is_some_and(|addr| addr == *remote_ipv6_addr)
-            }) {
-                return iface.clone();
-            }
-
-            // Fall back to an interface with an IPv6 address.
-            // Prefer virtio over loopback for external traffic.
-            if let Some(virtio_iface) = virtio_iface()
-                && virtio_iface.ipv6_addr().is_some()
-            {
-                return virtio_iface.clone();
-            }
-
-            loopback_iface().clone()
-        }
+fn get_ephemeral_ipv4_endpoint_and_route_type(
+    remote_ipv4_addr: Ipv4Address,
+) -> Result<(IpEndpoint, RouteType)> {
+    if let Some((_, source)) = iface::iter_all_ifaces().find_map(|iface| {
+        iface
+            .ipv4_addr()
+            .filter(|addr| *addr == remote_ipv4_addr)
+            .map(|addr| (iface, addr))
+    }) {
+        return Ok((
+            IpEndpoint::new(IpAddress::Ipv4(source), 0),
+            RouteType::LOCAL,
+        ));
     }
+
+    let route_entry = route::lookup(RouteLookupKey::new_dst(remote_ipv4_addr))?;
+    let iface = route::iface_by_index(route_entry.oif_index()).ok_or_else(|| {
+        Error::with_message(Errno::ENODEV, "the route output iface does not exist")
+    })?;
+    let source = iface.ipv4_addr().ok_or_else(|| {
+        Error::with_message(
+            Errno::EADDRNOTAVAIL,
+            "the route output iface has no IPv4 address",
+        )
+    })?;
+    Ok((
+        IpEndpoint::new(IpAddress::Ipv4(source), 0),
+        route_entry.type_(),
+    ))
+}
+
+fn get_ephemeral_ipv6_iface(remote_ipv6_addr: &aster_bigtcp::wire::Ipv6Address) -> Arc<Iface> {
+    if let Some(iface) = iface::iter_all_ifaces().find(|iface| {
+        iface
+            .ipv6_addr()
+            .is_some_and(|addr| addr == *remote_ipv6_addr)
+    }) {
+        return iface.clone();
+    }
+
+    if let Some(virtio_iface) = iface::virtio_iface()
+        && virtio_iface.ipv6_addr().is_some()
+    {
+        return virtio_iface.clone();
+    }
+
+    iface::loopback_iface().clone()
 }
 
 pub(super) fn resolve_bind_iface_and_config(
@@ -103,16 +109,28 @@ impl From<BindError> for Error {
     }
 }
 
-pub(super) fn get_ephemeral_endpoint(remote_endpoint: &IpEndpoint) -> Option<IpEndpoint> {
-    let iface = get_ephemeral_iface(&remote_endpoint.addr);
+pub(super) fn get_ephemeral_endpoint(remote_endpoint: &IpEndpoint) -> Result<IpEndpoint> {
+    Ok(get_ephemeral_endpoint_and_route_type(remote_endpoint)?.0)
+}
+
+pub(super) fn get_ephemeral_endpoint_and_route_type(
+    remote_endpoint: &IpEndpoint,
+) -> Result<(IpEndpoint, Option<RouteType>)> {
     match remote_endpoint.addr {
-        IpAddress::Ipv4(_) => {
-            let ip_addr = iface.ipv4_addr()?;
-            Some(IpEndpoint::new(IpAddress::Ipv4(ip_addr), 0))
+        IpAddress::Ipv4(remote_ipv4_addr) => {
+            let (endpoint, route_type) =
+                get_ephemeral_ipv4_endpoint_and_route_type(remote_ipv4_addr)?;
+            Ok((endpoint, Some(route_type)))
         }
-        IpAddress::Ipv6(_) => {
-            let ipv6_addr = iface.ipv6_addr()?;
-            Some(IpEndpoint::new(IpAddress::Ipv6(ipv6_addr), 0))
+        IpAddress::Ipv6(remote_ipv6_addr) => {
+            let iface = get_ephemeral_ipv6_iface(&remote_ipv6_addr);
+            let ipv6_addr = iface.ipv6_addr().ok_or_else(|| {
+                Error::with_message(
+                    Errno::EADDRNOTAVAIL,
+                    "no interface has an address for the specified family",
+                )
+            })?;
+            Ok((IpEndpoint::new(IpAddress::Ipv6(ipv6_addr), 0), None))
         }
     }
 }

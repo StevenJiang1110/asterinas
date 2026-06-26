@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 use core::ffi::CStr;
 
-use smoltcp::wire::{Ipv4Address, Ipv4Cidr, Ipv6Address};
+use smoltcp::{
+    iface::RouteTableFull,
+    wire::{Ipv4Address, Ipv4Cidr, Ipv6Address},
+};
 
 use super::{BindPortConfig, BoundTcpPort, BoundUdpPort, InterfaceFlags, InterfaceType};
 use crate::{errors::BindError, ext::Ext};
@@ -93,6 +96,11 @@ impl<E: Ext> dyn Iface<E> {
         self.common().prefix_len()
     }
 
+    /// Returns IPv4 routes currently installed in the iface.
+    pub fn ipv4_routes(&self) -> Vec<(Ipv4Cidr, Ipv4Address)> {
+        self.common().ipv4_routes()
+    }
+
     /// Gets the broadcast address of the iface, if any.
     pub fn broadcast_addr(&self) -> Option<Ipv4Address> {
         let cidr = {
@@ -102,6 +110,20 @@ impl<E: Ext> dyn Iface<E> {
             Ipv4Cidr::new(ipv4_addr, prefix_len)
         };
         cidr.broadcast()
+    }
+
+    /// Adds or replaces an IPv4 route.
+    pub fn add_ipv4_route(
+        &self,
+        dst: Ipv4Cidr,
+        gateway: Ipv4Address,
+    ) -> Result<(), RouteTableFull> {
+        self.common().add_ipv4_route(dst, gateway)
+    }
+
+    /// Removes an IPv4 route.
+    pub fn remove_ipv4_route(&self, dst: Ipv4Cidr) {
+        self.common().remove_ipv4_route(dst);
     }
 
     /// Returns a reference to the associated [`ScheduleNextPoll`].

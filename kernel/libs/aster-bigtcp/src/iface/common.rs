@@ -17,9 +17,11 @@ use bitflags::bitflags;
 use int_to_c_enum::TryFromInt;
 use ostd::sync::{SpinLock, SpinLockGuard};
 use smoltcp::{
-    iface::{Context, packet::Packet},
+    iface::{Context, Route, RouteTableFull, packet::Packet},
     phy::Device,
-    wire::{IpAddress, IpEndpoint, Ipv4Address, Ipv4Packet, Ipv6Address, Ipv6Packet},
+    wire::{
+        IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv4Cidr, Ipv4Packet, Ipv6Address, Ipv6Packet,
+    },
 };
 
 use super::{
@@ -128,6 +130,50 @@ impl<E: Ext> IfaceCommon<E> {
 
     pub(super) fn prefix_len(&self) -> Option<u8> {
         self.interface.lock().prefix_len()
+    }
+
+    pub(super) fn ipv4_routes(&self) -> Vec<(Ipv4Cidr, Ipv4Address)> {
+        self.interface.lock().ipv4_routes()
+    }
+
+    pub(super) fn add_ipv4_route(
+        &self,
+        dst: Ipv4Cidr,
+        gateway: Ipv4Address,
+    ) -> Result<(), RouteTableFull> {
+        let mut interface = self.interface.lock();
+        let dst = IpCidr::Ipv4(dst);
+        let gateway = IpAddress::Ipv4(gateway);
+        let mut add_res = Ok(());
+
+        interface.routes_mut().update(|routes| {
+            if let Some(route) = routes.iter_mut().find(|route| route.cidr == dst) {
+                route.via_router = gateway;
+                route.preferred_until = None;
+                route.expires_at = None;
+                return;
+            }
+
+            add_res = routes
+                .push(Route {
+                    cidr: dst,
+                    via_router: gateway,
+                    preferred_until: None,
+                    expires_at: None,
+                })
+                .map_err(|_| RouteTableFull);
+        });
+
+        add_res
+    }
+
+    pub(super) fn remove_ipv4_route(&self, dst: Ipv4Cidr) {
+        let mut interface = self.interface.lock();
+        let dst = IpCidr::Ipv4(dst);
+
+        interface.routes_mut().update(|routes| {
+            routes.retain(|route| route.cidr != dst);
+        });
     }
 
     pub(super) fn sched_poll(&self) -> &E::ScheduleNextPoll {
