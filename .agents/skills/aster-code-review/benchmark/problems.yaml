@@ -271,3 +271,586 @@
       expectation: >
         A reviewer should flag the non-imperative, non-descriptive subject and ask
         for a specific imperative summary.
+
+- problem_id: 0300-pidfd-send-signal-null-signal
+  commit: 84bced252b670004d88b0e482cb2bc100e031dde
+  source: >
+    PR-derived. Introduced by `84bced252` ("Add `pidfd_send_signal` syscall"),
+    whose implementation converts every user-supplied `sig_num` to `SigNum`
+    and therefore rejects `0`; fixed by PR #3376 commit
+    `2fb5885646cd02e964d1071b2feffdddea09bdde` ("Fix `pidfd_send_signal`
+    rejecting signal 0"), merged as `497b617c4`. The change under review is
+    the introducing commit itself, fetched by full SHA from upstream `main`
+    (no local patch). Leak-free: the introducing commit adds
+    `pidfd_send_signal` support and related tests, but does not include a
+    signal-0/null-signal test, guard, or explanatory comment that names the
+    defect.
+  review_mode:
+    diff:
+      base: HEAD^
+  defects:
+    - target: { kind: file, path: kernel/src/syscall/pidfd_send_signal.rs }
+      persona: development
+      grounding: bug
+      severity: major
+      desc: >
+        `pidfd_send_signal` treats every `sig_num` as a real signal by
+        immediately calling `SigNum::try_from(sig_num as u8)?` and then always
+        constructing a `RawSignal`. This rejects `sig_num == 0` with `EINVAL`,
+        but Linux defines signal 0 as a null signal: it should perform the
+        same target lookup, existence, and permission checks without
+        delivering a signal.
+      fix: >
+        Handle `sig_num == 0` before converting to `SigNum`: represent it as
+        no signal, still resolve and authorize the target, and pass `None`
+        through the kill/tgkill/kill_group path so no signal is delivered.
+        Only non-zero signal numbers should be converted to `SigNum` and
+        wrapped in a `RawSignal`.
+      expectation: >
+        A reviewer should flag that signal 0 must be handled as the Linux
+        null-signal case: perform target lookup and permission checks without
+        converting it to `SigNum` or delivering a signal.
+
+- problem_id: 0301-file-capability-invalid-bits
+  commit: 2ae030b7ffa6bbcc461d4acb796316108b5f8ca3
+  source: >
+    Review-comment-derived from PR #3365 discussion
+    `https://github.com/asterinas/asterinas/pull/3365#discussion_r3466788002`.
+    StevenJiang1110 reviewed commit `2ae030b7ffa6bbcc461d4acb796316108b5f8ca3`
+    ("Refactor file capability execve handling") and pointed out that using
+    `try_from_lo_hi` to parse file capability sets is incompatible with Linux,
+    which masks unsupported capability bits instead of rejecting the xattr.
+    The change under review is that PR commit itself, fetched by full SHA from
+    upstream. The input is leak-free: the diff refactors file-capability
+    parsing and contains no test, comment, or fix that tells the reviewer to
+    truncate invalid capability bits.
+  review_mode:
+    diff:
+      base: HEAD^
+  defects:
+    - target: { kind: file, path: kernel/src/process/credentials/file_capabilities.rs }
+      persona: security
+      grounding: bug
+      severity: major
+      desc: >
+        `FileCapabilities::parse` builds the permitted and inheritable sets
+        with `CapSet::try_from_lo_hi(...)`. That makes any bit outside
+        Asterinas's currently known capability mask an `EINVAL` parse failure
+        during `execve`. Linux does not reject file capability xattrs for
+        unknown capability bits in the permitted or inheritable words; it
+        masks those bits with `CAP_VALID_MASK` and continues using the
+        supported subset.
+      fix: >
+        Convert the xattr words with a truncating constructor such as
+        `CapSet::from_lo_hi`, which masks unsupported capability bits, while
+        still rejecting invalid revisions, invalid flags, and length
+        mismatches.
+      expectation: >
+        A reviewer should flag that file capability parsing must mask unknown
+        capability bits instead of rejecting the xattr with `EINVAL`.
+
+- problem_id: 0302-epoll-self-loop-check
+  commit: b29dd52d67be0a36bd3ae2e8ecddf0b7d142f25d
+  source: >
+    Review-comment-derived from PR #3395 discussions
+    `https://github.com/asterinas/asterinas/pull/3395#discussion_r3427908136`
+    and
+    `https://github.com/asterinas/asterinas/pull/3395#discussion_r3428943854`.
+    Reviewers commented on commit `b29dd52d67be0a36bd3ae2e8ecddf0b7d142f25d`
+    ("Fix EpollTest.CycleOfOneDisallowed"): the patch rejects only `epfd ==
+    fd` in `sys_epoll_ctl`, but Linux rejects adding an epoll file to itself
+    by comparing the underlying file objects, and the check belongs where the
+    controlled file is resolved to avoid fd-table TOCTOU issues. The change
+    under review is that PR commit itself, fetched by full SHA from upstream.
+    The input is leak-free: the diff only adds a numeric-fd equality guard and
+    unblocks one gVisor test; it does not include the underlying-file
+    comparison, the TOCTOU explanation, or complete epoll loop detection.
+  review_mode:
+    diff:
+      base: HEAD^
+  defects:
+    - target: { kind: file, path: kernel/src/syscall/epoll.rs }
+      persona: development
+      grounding: atomic-critical-sections
+      severity: major
+      desc: >
+        The new `epfd == fd` guard only compares descriptor numbers before
+        `sys_epoll_ctl` resolves either descriptor to a file. That catches the
+        trivial case where the same integer is passed twice, but it misses
+        aliases such as `dup(epfd)`, where two different fd numbers refer to
+        the same underlying `EpollFile`, so an epoll instance can still be
+        added to itself and form a wakeup loop.
+      fix: >
+        Resolve the controlled fd in the `EpollFile::control` path and reject
+        self-reference by comparing the underlying file object with the
+        current epoll file, not by comparing raw fd numbers. Keep the check
+        coupled to the file object that will actually be inserted, and extend
+        it toward complete epoll loop detection for longer cycles.
+      expectation: >
+        A reviewer should flag that self-reference must be checked on the
+        resolved epoll file object, not by comparing fd numbers, so aliases
+        such as `dup(epfd)` and fd-table races are handled.
+
+- problem_id: 0303-tty-ocrnl-cr-mapping
+  commit: 7b7b6b956aa95cccb32a3dafa74f09c775b2c538
+  source: >
+    Review-comment-derived from PR #3301 discussion
+    `https://github.com/asterinas/asterinas/pull/3301#discussion_r3333901821`.
+    StevenJiang1110 reviewed commit `7b7b6b956aa95cccb32a3dafa74f09c775b2c538`
+    ("add ouput flags inspect") and pointed out that the `OCRNL` output flag
+    maps carriage return to newline, not to carriage-return-plus-newline. The
+    change under review is that PR commit itself, fetched by full SHA from
+    upstream. The input is leak-free: the diff adds output-flag handling for
+    TTY echoing but contains no test, comment, or later fix that states the
+    correct `OCRNL` mapping.
+  review_mode:
+    diff:
+      base: HEAD^
+  defects:
+    - target: { kind: file, path: kernel/src/device/tty/line_discipline.rs }
+      persona: development
+      grounding: bug
+      severity: major
+      desc: >
+        The new `output_char` handling for `b'\r'` checks `OPOST | OCRNL` but
+        emits `b"\r\n"`. That is the newline-to-carriage-return-newline
+        behavior of `ONLCR`, not the carriage-return-to-newline behavior of
+        `OCRNL`. With `OCRNL` enabled, echoing a carriage return should
+        produce a single newline byte, so the implementation gives user space
+        the wrong terminal echo sequence and does not match POSIX/Linux output
+        processing semantics.
+      fix: >
+        In the `b'\r'` branch, when `OPOST` and `OCRNL` are set, emit `b"\n"`.
+        Keep the existing no-conversion path as `b"\r"` when `OCRNL` is not
+        active.
+      expectation: >
+        A reviewer should flag that `OCRNL` maps carriage return to a single
+        newline byte, not to carriage-return-plus-newline.
+
+- problem_id: 0304-file-cap-setuid-root-effective
+  commit: f5fc357bbb33de3e2667f217572e65d4bd6fe7e8
+  source: >
+    Review-comment-derived from PR #3365 discussions
+    `https://github.com/asterinas/asterinas/pull/3365#discussion_r3458393524`
+    and
+    `https://github.com/asterinas/asterinas/pull/3365#discussion_r3459392413`.
+    StevenJiang1110 reviewed the file-capability execve handling and pointed
+    out that a process should not gain a full effective capability set merely
+    because the executable makes `exec_euid` root when the file also has file
+    capabilities. Local benchmark triage of the same reviewed commit also
+    confirmed that the refactor prepares `ExecCapSets` from one executable
+    mode/owner snapshot, then later re-reads the inode metadata when applying
+    the setuid/setgid transition, and that the same refactor makes
+    `execve` read `security.capability` through the normal xattr API that
+    requires DAC read permission. GitHub records the reviewed
+    `original_commit_id` as
+    `f5fc357bbb33de3e2667f217572e65d4bd6fe7e8`; the user-provided related
+    commit `17da651de7791c42f366ae7efb32daba7b9b9416` already contains the
+    corrected condition and is not used as the review input. The change under
+    review is the original PR commit, fetched by full SHA from upstream. The
+    input is leak-free enough for this review problem: the diff contains the
+    flawed condition, but not the later corrected condition or a regression
+    test that directly states the expected behavior.
+  review_mode:
+    diff:
+      base: HEAD^
+  defects:
+    - target: { kind: file, path: kernel/src/process/credentials/credentials_.rs }
+      persona: security
+      grounding: bug
+      severity: critical
+      desc: >
+        `calculate_capsets_for_exec` computes `file_effective` with `(!no_root
+        && exec_euid.is_root()) || file_capabilities.has_effective_flag()`.
+        That grants a full effective capability set whenever exec makes the
+        effective UID root, even if the executable also carries file
+        capabilities. Linux treats the setuid-root plus file-capability case
+        specially: for a non-root caller executing such a file, the file
+        capabilities suppress the legacy setuid-root full-capability grant,
+        and only the file-capability effective flag should make the permitted
+        set effective.
+      fix: >
+        Base `file_effective` on the same root-special-case predicate used for
+        the permitted and inheritable file sets, so `exec_euid == 0` grants
+        full effective capabilities only when the legacy root rule actually
+        applies. If file capabilities are present for a non-root caller, use
+        the xattr effective flag to decide whether the resulting permitted set
+        becomes effective.
+      expectation: >
+        A reviewer should flag that setuid-root must not grant a full
+        effective capability set when file capabilities are present for a
+        non-root caller; only the file effective flag should make the
+        permitted set effective.
+    - target: { kind: file, path: kernel/src/process/credentials/file_capabilities.rs }
+      persona: security
+      grounding: bug
+      severity: major
+      desc: >
+        `FileCapabilities::read_from_inode` now calls `inode.get_xattr(...)`
+        to read `security.capability`. The filesystem `Inode::get_xattr`
+        implementations, such as ext2, perform a normal `MAY_READ` DAC check
+        before looking up the xattr. That check is inappropriate for exec-time
+        file-capability loading: a file can be executable without being
+        readable, for example mode `0111`, and an execute-only file with no
+        `security.capability` xattr should execute normally. With the new
+        path, the read permission check returns `EACCES` before the xattr
+        lookup can return `ENODATA`, so `execve` rejects such programs.
+      fix: >
+        Keep exec-time file-capability lookup on a permission-bypassing xattr
+        path, or provide an internal helper that reads `security.capability`
+        without applying the caller's ordinary file read permission check.
+        Continue treating `ENODATA` and `EOPNOTSUPP` as absence of file
+        capabilities.
+      expectation: >
+        A reviewer should flag that loading `security.capability` during
+        `execve` must not require the executable to be readable; execute-only
+        files without file capabilities must reach the xattr absence case and
+        execute successfully.
+    - target: { kind: file, path: kernel/src/process/execve.rs }
+      persona: security
+      grounding: bug
+      severity: major
+      desc: >
+        `do_execve` computes `exec_euid` from `elf_file.mode()` and
+        `elf_file.owner()` before the irreversible exec phase, and
+        `prepare_capsets_for_exec` turns that value into cached
+        `ExecCapSets`. Later, `apply_caps_from_exec` calls
+        `set_uid_from_elf` and `set_gid_from_elf`, which re-read the inode
+        mode, owner, and group before installing the already-computed
+        capability sets. If the executable metadata changes between these
+        reads, the final effective UID/GID and the installed capability sets
+        can be derived from different file states.
+      fix: >
+        Use one consistent executable metadata snapshot for both the
+        setuid/setgid credential transition and capability calculation, or
+        recompute the final capability sets after applying the actual UID/GID
+        changes that will be committed. The pre-irreversible phase may still
+        validate file-capability failures, but the no-return phase must not
+        install capability sets derived from stale mode/owner metadata.
+      expectation: >
+        A reviewer should flag that exec capability sets are prepared from one
+        executable mode/owner snapshot while the setuid/setgid transition later
+        re-reads inode metadata, so concurrent metadata changes can make the
+        installed capabilities inconsistent with the final credentials.
+
+- problem_id: 0305-unix-stream-empty-eagain
+  commit: cf90a0dc5c90ad19600da67ac67295ec7dd15788
+  source: >
+    Review-comment-derived from PR #3347 discussion
+    `https://github.com/asterinas/asterinas/pull/3347#discussion_r3479237854`.
+    lrh2000 pointed out that the UNIX stream `MSG_PEEK` auxiliary-data read
+    path must still return `EAGAIN` when the receive buffer is empty;
+    otherwise it can reach `debug_assert!(is_seqpacket || read_tot_len != 0)`.
+    GitHub's current `commit_id` for the comment is the later SCML-only commit
+    `c9e2cefc933d0efe046d9b6edc4e0b5a57562585`, but that snapshot already
+    contains the empty-buffer fix in `connected.rs`. The reviewed buggy
+    snapshot is the comment's `original_commit_id`
+    `cf90a0dc5c90ad19600da67ac67295ec7dd15788`, which is used here as a
+    files-mode base. Leak-free: reviewing the whole file at this snapshot
+    shows the new `MSG_PEEK` logic and the problematic empty-buffer path, but
+    not the later fix that re-enters `read_with` to produce `EAGAIN`.
+  review_mode:
+    files:
+      - kernel/src/net/socket/unix/stream/connected.rs
+  defects:
+    - target: { kind: file, path: kernel/src/net/socket/unix/stream/connected.rs }
+      persona: development
+      grounding: bug
+      severity: major
+      desc: >
+        In `Connected::try_read`, the auxiliary-data path can see `aux_len ==
+        0` with no auxiliary entry when a UNIX stream receive buffer is empty.
+        The new loop simply breaks in that case, leaving `read_tot_len == 0`;
+        for non-SEQPACKET sockets it then reaches `debug_assert!(is_seqpacket
+        || read_tot_len != 0)` and, in non-debug builds, can return a
+        zero-length successful read instead of the stream receive semantics.
+        The old `read_with` path was responsible for returning `EAGAIN` on an
+        empty channel, so a reviewer should flag that the refactor bypasses
+        that empty-buffer check in the auxiliary-data branch.
+      fix: >
+        When the loop detects no payload and no auxiliary entry before reading
+        anything on a non-SEQPACKET socket, re-enter the endpoint read path
+        (for example `self.inner.read_with(|| Ok(0))?`) so the endpoint
+        returns `EAGAIN` for an empty channel, then break only after that
+        check.
+      expectation: >
+        A reviewer should flag that the `MSG_PEEK` auxiliary-data path must
+        still return `EAGAIN` when the UNIX stream receive buffer is empty,
+        instead of returning a zero-length success or reaching the debug
+        assertion.
+
+- problem_id: 0306-rt-sigprocmask-unblockable-signals
+  commit: 2dbe739e4da0ca7d15c71c726c797948365787ac
+  source: >
+    PR-body-derived from PR #2288
+    `https://github.com/asterinas/asterinas/pull/2288#issue-3268551599`. The
+    PR fixes `rt_sigprocmask` so user space cannot block `SIGKILL` or
+    `SIGSTOP`. Files mode uses `2dbe739e4da0ca7d15c71c726c797948365787ac`, the
+    parent of fixing commit `8c7ad082c950a388ad609a6dcc3ba2bf676f1628`,
+    because it is the newest buggy snapshot before the `SetMask` branch starts
+    filtering unblockable signals. Local benchmark triage of the same snapshot
+    also identified that the syscall decodes `how` before checking whether the
+    user supplied a new mask, and that the syscall-local `MaskOp` decode enum
+    is unnecessarily public.
+  review_mode:
+    files:
+      - kernel/src/syscall/rt_sigprocmask.rs
+  defects:
+    - target: { kind: file, path: kernel/src/syscall/rt_sigprocmask.rs }
+      persona: development
+      grounding: linux-compatibility
+      severity: critical
+      desc: >
+        `sys_rt_sigprocmask` sanitizes `read_mask` for `MaskOp::Block`, but
+        the `MaskOp::SetMask` arm stores the user-provided mask verbatim with
+        `sig_mask_ref.store(read_mask, Ordering::Relaxed)`. A caller using
+        `SIG_SETMASK` can therefore place `SIGKILL` or `SIGSTOP` in the
+        thread's blocked signal mask. Linux requires attempts to block these
+        two signals to be silently ignored, so accepting them in the set-mask
+        path can make user tasks unkillable or unstoppable and breaks signal
+        semantics.
+      fix: >
+        Remove `SIGKILL` and `SIGSTOP` from the mask before storing it in the
+        `MaskOp::SetMask` branch. The operation should still return success,
+        matching Linux's silently-ignore behavior for attempts to block these
+        signals.
+      expectation: >
+        A reviewer should flag that every path installing a blocked signal
+        mask, including `SIG_SETMASK`, must preserve the invariant that
+        `SIGKILL` and `SIGSTOP` cannot be blocked.
+    - target: { kind: file, path: kernel/src/syscall/rt_sigprocmask.rs }
+      persona: development
+      grounding: linux-compatibility
+      severity: major
+      desc: >
+        `sys_rt_sigprocmask` converts `how` with `MaskOp::try_from(how)?`
+        before it checks whether `set_ptr` is null. Linux ignores the `how`
+        argument when `set` is `NULL`, because that call only reads the current
+        signal mask through `oldset`. A call such as
+        `rt_sigprocmask(999, NULL, oldset, 8)` should therefore succeed and
+        report the old mask, but this implementation returns `EINVAL` before
+        it reaches the `oldset_ptr` write.
+      fix: >
+        Delay converting `how` to `MaskOp` until the `set_ptr != 0` path, or
+        pass an `Option<MaskOp>` into the helper so the read-only
+        `set_ptr == 0` case writes `oldset` without validating `how`.
+      expectation: >
+        A reviewer should flag that `rt_sigprocmask` must ignore invalid
+        `how` values when `set` is `NULL`; only calls that install or change a
+        signal mask should validate the operation.
+    - target: { kind: file, path: kernel/src/syscall/rt_sigprocmask.rs }
+      persona: maintainability
+      grounding: narrow-visibility
+      severity: minor
+      desc: >
+        `MaskOp` is declared `pub`, but it is only used inside
+        `kernel/src/syscall/rt_sigprocmask.rs` to decode the syscall's `how`
+        argument. Exposing this syscall-local enum creates an unnecessary
+        module interface for an implementation detail that no other module
+        needs to name.
+      fix: >
+        Make `MaskOp` private unless another module actually needs to use the
+        enum type directly.
+      expectation: >
+        A reviewer should flag that syscall-local decode enums should not be
+        public when all uses are contained in the same source file.
+
+- problem_id: 0307-rt-sigreturn-sysret-context
+  commit: d083aef69020460e1d88999ec96bb2f6a81bdad4
+  source: >
+    PR-body-derived from PR #2271
+    `https://github.com/asterinas/asterinas/pull/2271#issue-3242196266`. The
+    PR fixes the x86 syscall return path so it uses `iret` instead of `sysret`
+    when the user context is not clean enough for `sysret`. Files mode uses
+    `d083aef69020460e1d88999ec96bb2f6a81bdad4`, the parent of fixing commit
+    `424fcda239fe14fa98ece0377ef377dad48bfc7d`, because it is the newest buggy
+    snapshot before the syscall-return decision logic is added.
+  review_mode:
+    files:
+      - ostd/src/arch/x86/trap/syscall.S
+      - kernel/src/syscall/rt_sigreturn.rs
+      - kernel/src/process/signal/mod.rs
+  defects:
+    - target: { kind: file, path: ostd/src/arch/x86/trap/syscall.S }
+      persona: hardware
+      grounding: x86-sysret-context
+      severity: critical
+      desc: >
+        `sys_rt_sigreturn` copies the saved user `ucontext` registers back
+        into `UserContext`, so registers such as `rcx` and `r11` may
+        intentionally differ from the original syscall-entry values. The x86
+        `syscall_return` path in `syscall.S` nevertheless selects the fast
+        path solely from the syscall trap marker and then executes `sysretq`.
+        On x86-64, `sysretq` does not restore `rcx` and `r11` as ordinary
+        general registers; it consumes them as the return RIP and RFLAGS.
+        Therefore a signal handler that edits the saved context before
+        `rt_sigreturn` can lose the requested `rcx`/`r11` values or return
+        with corrupted state.
+      fix: >
+        Add a syscall-return decision before `sysretq`: use the fast `sysret`
+        path only when the restored context is clean for `sysret`, including
+        `rcx == rip`, `r11 == rflags`, acceptable flags, and a canonical
+        return address. Otherwise construct an interrupt-return frame and
+        return with `iretq`, so `rt_sigreturn` can restore the full user
+        register context.
+      expectation: >
+        A reviewer should flag that the syscall fast return is valid only for
+        contexts compatible with `sysret`; `rt_sigreturn` may restore
+        `rcx`/`r11`/flags requiring the full `iretq` path.
+
+- problem_id: 0308-signalfd-observer-filter-mask
+  commit: 20c2e967fea035e7377af4a0c6d947afbe507f43
+  source: >
+    PR-body-derived from PR #2245
+    `https://github.com/asterinas/asterinas/pull/2245`. The PR fixes the mask
+    used when registering a `signalfd` as a signal-queue observer. Files mode
+    uses `20c2e967fea035e7377af4a0c6d947afbe507f43`, the parent of fixing
+    commit `2a34a041c4eec4622288da0b1d878e651cbdd443`, because it is the
+    newest buggy snapshot before the fix and does not contain the
+    mask-inversion comment or the `!mask` change.
+  review_mode:
+    files:
+      - kernel/src/syscall/signalfd.rs
+      - kernel/src/process/signal/events.rs
+      - kernel/src/process/signal/sig_queues.rs
+  defects:
+    - target: { kind: file, path: kernel/src/syscall/signalfd.rs }
+      persona: development
+      grounding: linux-compatibility
+      severity: major
+      desc: >
+        `signalfd` treats the user-provided mask as the set of signals
+        accepted by the file descriptor, storing it in `signals_mask` and
+        notifying or reading only signals contained in that mask. However, the
+        signal-queue observer registration passes that same accepted-signal
+        mask to `SigEventsFilter::new`. `SigEventsFilter::filter` returns true
+        when the event signal is not contained in its mask, so its mask
+        represents signals to suppress, not signals to accept. Registering
+        with `mask` therefore suppresses notifications for exactly the signals
+        the signalfd is supposed to receive and wakes the file only for
+        signals outside the signalfd mask.
+      fix: >
+        When registering or updating the signal-queue observer, pass `!mask`
+        (and `!new_mask`) to `SigEventsFilter::new`, while still storing the
+        original accepted-signal mask in `signals_mask`. This makes the
+        observer filter suppress signals outside the signalfd mask and notify
+        the fd for signals that the signalfd should deliver.
+      expectation: >
+        A reviewer should flag the mask-polarity mismatch between signalfd's
+        accepted-signal mask and the signal-queue observer filter, where
+        notifications for signals accepted by the signalfd are filtered out.
+
+- problem_id: 0309-read-cstring-reader-cursor
+  commit: f4e79d99d04757347a6eaa05f6acb41b8898c927
+  source: >
+    PR-body-derived from PR #1968
+    `https://github.com/asterinas/asterinas/pull/1968`. The PR fixes
+    `ReadCString` leaving a `VmReader` cursor past the actual C-string length
+    when a null byte is found inside a word-sized bulk read. History
+    inspection shows that the original word-at-a-time address-based helper was
+    introduced earlier in `10690063eb9d6ebf09fde1a7a3b767803f73fdda`, but that
+    helper used a local address cursor and did not expose a reusable
+    `VmReader` cursor after returning. Files mode uses
+    `f4e79d99d04757347a6eaa05f6acb41b8898c927`, the parent of the fixing
+    commit `1846c680fc4630b78d663c8b2475b9cde45079ea`, because it is a recent
+    buggy snapshot with `ReadCString for VmReader<'_, Fallible>` and no
+    cursor-preserving fix or regression test.
+  review_mode:
+    files:
+      - kernel/src/context.rs
+      - ostd/src/mm/io.rs
+  defects:
+    - target: { kind: file, path: kernel/src/context.rs }
+      persona: development
+      grounding: bug
+      severity: major
+      desc: >
+        `ReadCString for VmReader<'_, UserSpace>` scans the aligned middle of
+        the input by calling `self.read_val::<usize>()`. That advances the
+        reader cursor by a full machine word before the code checks whether
+        the word contains a null byte. If the null terminator is in the middle
+        of the word, the method returns a valid `CString` after pushing only
+        the bytes through the terminator, but `self` has already consumed the
+        whole word. Any caller that continues reading from the same `VmReader`
+        will therefore start several bytes after the true end of the C string
+        and misread the following data.
+      fix: >
+        Inspect word-sized chunks without moving the original reader cursor,
+        for example by reading through a cloned or peek reader. Advance the
+        original reader only by the actual number of bytes accepted: one byte
+        at a time through the null terminator when the word contains zero, and
+        by `size_of::<usize>()` only for words that contain no zero byte.
+      expectation: >
+        A reviewer should flag that finding a null terminator inside a bulk
+        word must not advance the original `VmReader` past the actual C-string
+        length.
+
+- problem_id: 0310-accept4-invalid-flags
+  commit: 23770dfd060e4f978fdd256a847b9a2e09075eda
+  source: >
+    PR-body-derived from PR #3367
+    `https://github.com/asterinas/asterinas/pull/3367`. The PR fixes `accept4`
+    silently accepting flag bits other than `SOCK_CLOEXEC` and
+    `SOCK_NONBLOCK`. Files mode uses
+    `23770dfd060e4f978fdd256a847b9a2e09075eda`, the parent of fixing commit
+    `44c31f5874f2fdc817260072e3ee949b1188af7f`, because it is the newest buggy
+    snapshot before the validating conversion and regression test are added.
+  review_mode:
+    files:
+      - kernel/src/syscall/accept.rs
+  defects:
+    - target: { kind: file, path: kernel/src/syscall/accept.rs }
+      persona: development
+      grounding: linux-compatibility
+      severity: major
+      desc: >
+        `sys_accept4` converts the raw `flags` argument with
+        `Flags::from_bits_truncate(flags)`. That silently drops every bit not
+        represented by the local `Flags` type and then continues the accept
+        operation. Linux only accepts `SOCK_CLOEXEC` and `SOCK_NONBLOCK` for
+        `accept4`; any other bit must make the syscall fail with `EINVAL`
+        before accepting a connection.
+      fix: >
+        Parse the raw flags with a validating conversion such as
+        `Flags::from_bits(flags)`, return `EINVAL` when it yields `None`, and
+        only call `do_accept` after the flags are known to contain no bits
+        outside `SOCK_CLOEXEC | SOCK_NONBLOCK`.
+      expectation: >
+        A reviewer should flag that `accept4` must reject unsupported flag
+        bits with `EINVAL` instead of truncating them and accepting the
+        connection.
+
+- problem_id: 0311-chroot-missing-capability-check
+  commit: 5b46e566dee52a836b0189082d88e0bb208b549e
+  source: >
+    PR-body-derived from PR #3518
+    `https://github.com/asterinas/asterinas/pull/3518#issue-4794180601`. The
+    PR fixes `chroot` so it requires `CAP_SYS_CHROOT` before updating the
+    process root. Files mode uses
+    `5b46e566dee52a836b0189082d88e0bb208b549e`, the parent of fixing commit
+    `9553331705b0e195deec97cb9cf3ffa3101aaf0b`, because it is the newest
+    buggy snapshot before the capability check and regression test are added.
+  review_mode:
+    files:
+      - kernel/src/syscall/chroot.rs
+  defects:
+    - target: { kind: file, path: kernel/src/syscall/chroot.rs }
+      persona: security
+      grounding: permission-check
+      severity: critical
+      desc: >
+        `sys_chroot` validates that the path exists and is a directory, then
+        immediately calls `path_resolver.set_root(path)`. It never checks
+        whether the calling thread has `CAP_SYS_CHROOT` in its user namespace.
+        Linux requires `chroot` to fail with `EPERM` when that capability is
+        missing, because changing a process's root directory is a privileged
+        operation. Without the check, an unprivileged process that can name a
+        directory can update its root and bypass the intended capability gate.
+      fix: >
+        Before calling `set_root`, call the LSM capability hook for
+        `CapSet::SYS_CHROOT` in the caller's user namespace and propagate its
+        error, so callers without the capability receive `EPERM`.
+      expectation: >
+        A reviewer should flag that `chroot` must require `CAP_SYS_CHROOT`
+        before changing the process root, rather than allowing any caller that
+        provides a directory path to call `set_root`.

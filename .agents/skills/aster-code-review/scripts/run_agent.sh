@@ -15,8 +15,8 @@
 #   ACR_AGENT_PROFILE    REQUIRED. a profile NAME -> agent_profiles/<name>/, or a dir path.
 #   ACR_PROFILE_VARIANT  `smoke` merges the `.smoke` overlay over the base profile; unset = base.
 #
-# A profile dir holds profile.json (command/env/inherit)
-# and, by convention, an optional config.toml seeded into a private {workdir}.
+# A profile dir holds profile.json (command/env/inherit/config_base) and, by convention,
+# an optional config.toml seeded into a private {workdir}.
 # {prompt}/{workdir}/{home} in the profile are substituted.
 # Runs in the current cwd and inherits the current env PLUS the profile env.
 set -uo pipefail
@@ -57,8 +57,7 @@ trap 'rm -rf "$PROFILE_WORKDIR"' EXIT
 declare -a PROFILE_CMD=() PROFILE_ENV=() INH_SRC=() INH_DEST=()
 
 # Parse the (smoke-merged) profile.json into C<TAB>token | E<TAB>KEY=VAL | I<TAB>src<TAB>dest,
-# and seed the (smoke-merged) config.toml into {workdir}.
-# {workdir}/{home} are resolved now (static);
+# and seed the config into {workdir}. {workdir}/{home} are resolved now (static);
 # {prompt} is left for the launch below.
 profile_parsed="$(python3 - "$PROFILE_DIR" "$PROFILE_WORKDIR" "$HOME" "$PROFILE_SMOKE" <<'PY'
 import json, os, sys
@@ -76,38 +75,69 @@ def sub(s): return str(s).replace("{workdir}", workdir).replace("{home}", home)
 for t in cmd:                                          print("C\t" + sub(t))
 for k, v in (prof.get("env") or {}).items():           print("E\t" + f"{k}={sub(v)}")
 for src, dest in (prof.get("inherit") or {}).items():  print("I\t" + sub(str(src)) + "\t" + sub(dest))
-# config convention: seed config.toml into {workdir} if present, shallow-merging the
-# smoke overlay. Top-level `key = value` scalars merge per-key (a smoke key wins);
-# any `[table]` section (e.g. a `[model_providers.*]` for API-key auth) is preserved
-# verbatim after the scalars — the flat merge cannot represent it. Comments are dropped
-# from the seeded copy (the source keeps them); tables must follow the scalars, as ours do.
-def toml_flat(p):        # top-level scalar keys only — stop at the first table header
-    d = {}
+# Config convention:
+# - config_base in profile.json optionally names an existing TOML file to use as
+#   the base (for example the user's real Codex config with model_providers).
+# - profile config.toml and config.smoke.toml are flat top-level overlays; their
+#   keys override the base while tables from the base are preserved.
+def top_level_toml(p):
+    items = []
     if os.path.exists(p):
         for ln in open(p):
             s = ln.strip()
-            if s.startswith("["): break
-            if s and not s.startswith("#") and "=" in s:
-                k, v = s.split("=", 1); d[k.strip()] = v.strip()
-    return d
-def toml_tables(p):      # raw lines from the first table header to EOF, kept verbatim
-    out, started = [], False
-    if os.path.exists(p):
-        for ln in open(p):
-            if not started and ln.lstrip().startswith("["): started = True
-            if started: out.append(ln.rstrip("\n"))
-    return out
-base = os.path.join(pdir, "config.toml")
-if os.path.exists(base):
-    cfg, tables = toml_flat(base), toml_tables(base)
-    if smoke:
-        smk = os.path.join(pdir, "config.smoke.toml")
-        cfg.update(toml_flat(smk))
-        st = toml_tables(smk)
-        if st: tables = st                     # a smoke overlay with tables replaces (none today)
+            if s.startswith("["):
+                break
+            if s and not s.startswith(("#", "[")) and "=" in s:
+                k, v = s.split("=", 1)
+                items.append((k.strip(), v.strip()))
+    return items
+def merge_config(base_text, overlay):
+    if not overlay:
+        return base_text
+    overlay_keys = {k for k, _ in overlay}
+    lines = base_text.splitlines()
+    prefix, rest = [], []
+    in_tables = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_tables = True
+        if not in_tables and stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in overlay_keys:
+                continue
+        (rest if in_tables else prefix).append(line)
+    rendered = [f"{k} = {v}" for k, v in overlay]
+    merged = prefix
+    if merged and rendered:
+        merged.append("")
+    merged.extend(rendered)
+    if rest:
+        if merged:
+            merged.append("")
+        merged.extend(rest)
+    return "\n".join(merged).rstrip() + "\n"
+
+config_base = prof.get("config_base")
+base_text = ""
+if config_base:
+    config_base = sub(str(config_base))
+    if not os.path.exists(config_base):
+        sys.stderr.write(f"profile config_base not found: {config_base}\n"); sys.exit(3)
+    base_text = open(config_base).read()
+overlay = top_level_toml(os.path.join(pdir, "config.toml"))
+if smoke:
+    by_key = {k: v for k, v in overlay}
+    order = [k for k, _ in overlay]
+    for k, v in top_level_toml(os.path.join(pdir, "config.smoke.toml")):
+        if k not in by_key:
+            order.append(k)
+        by_key[k] = v
+    overlay = [(k, by_key[k]) for k in order]
+cfg_text = merge_config(base_text, overlay)
+if cfg_text:
     with open(os.path.join(workdir, "config.toml"), "w") as f:
-        for k, v in cfg.items(): f.write(f"{k} = {v}\n")
-        if tables: f.write("\n" + "\n".join(tables) + "\n")
+        f.write(cfg_text)
 PY
 )" || { echo "run_agent.sh: invalid profile: $PROFILE_DIR" >&2; exit 2; }
 while IFS=$'\t' read -r tag a b; do

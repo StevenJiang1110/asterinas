@@ -256,8 +256,10 @@ So 0001 is a genuine userspace-reachable panic (a DoS),
 This is the benchmark working as intended
 — the skill's own verification corrected a mislabel.
 
-So the suite is **8 recall problems (9 expected defects)** — 6 `diff` and 2 `files`.
-The 100%-recall gate is over the 9 recall defects.
+The initial suite was **8 recall problems (9 expected defects)** — 6 `diff` and 2 `files`.
+The imported 0300-series problems extend it to **19 recall problems (21 expected defects)**
+— 11 `diff` and 8 `files`.
+The 100%-recall gate is over the 21 recall defects.
 There is no `is_negative` defect at the moment (0001 was reclassified);
 precision is tracked via the "extra"-findings report until negative defects are added (see *Scoring*).
 
@@ -320,8 +322,11 @@ Its fields:
 | `command` | argv array (REQUIRED); `{prompt}`/`{workdir}`/`{home}` substituted per call. |
 | `env` | environment to set (e.g. `CODEX_HOME`); `{workdir}`/`{home}` substituted. |
 | `inherit` | files copied in from *outside* the profile — e.g. the agent's real `auth.json` — so a relocated, sandboxed home stays authenticated. |
+| `config_base` | optional TOML file used as the base for `{workdir}/config.toml`; profile `config.toml` overlays top-level keys while preserving base tables such as Codex `model_providers`. |
 
 By **convention** a `config.toml` in the profile dir is seeded into `{workdir}/config.toml` (no `config` key needed — `env`/`inherit` stay explicit because they are the genuinely agent-specific bits).
+If `config_base` is present, the launcher starts from that TOML and overlays the profile's top-level `config.toml` keys;
+this lets a local Codex profile reuse account-specific provider tables while still pinning benchmark model, effort, sandbox, and approval settings in the profile.
 The launcher `run_agent.sh` makes the private `{workdir}`,
 seeds the config, applies `env`,
 copies `inherit`, and runs `command` with `{prompt}`
@@ -343,7 +348,7 @@ Each agent propagates through its *own* native mechanism
 - **Codex** — model/effort live in a `config.toml` seeded into a private `CODEX_HOME`;
   since `CODEX_HOME` is an env var,
   every nested `codex exec` the skill spawns for a persona inherits it and reads the same config.
-  (Relocating `CODEX_HOME` is exactly why `inherit` exists — codex keeps its login token in `CODEX_HOME/auth.json`, so the profile copies the real one in.)
+  (Relocating `CODEX_HOME` is exactly why `inherit` and `config_base` exist — codex keeps its login token in `CODEX_HOME/auth.json`, while provider definitions may live in the user's real `config.toml`.)
 
 Pinning has one caveat worth stating:
 model *availability* is account-specific (a ChatGPT-account login serves `gpt-5.5`; an API key may serve `gpt-5-codex`),

@@ -1,5 +1,5 @@
 # Native Codex config for the benchmark,
-# seeded into a private CODEX_HOME by run.sh (see codex.json).
+# seeded into a private CODEX_HOME by run_agent.sh (see profile.json).
 # Read by the orchestrator AND every nested `codex exec` persona pass (they inherit CODEX_HOME),
 # so model/effort propagate through the fan-out.
 #
