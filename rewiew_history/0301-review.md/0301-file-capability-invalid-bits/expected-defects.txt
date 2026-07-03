@@ -1,0 +1,5 @@
+# Expected defects
+
+1. location: kernel/src/process/credentials/file_capabilities.rs (persona: security, grounding: bug, severity: major)
+   defect: `FileCapabilities::parse` builds the permitted and inheritable sets with `CapSet::try_from_lo_hi(...)`. That makes any bit outside Asterinas's currently known capability mask an `EINVAL` parse failure during `execve`. Linux does not reject file capability xattrs for unknown capability bits in the permitted or inheritable words; it masks those bits with `CAP_VALID_MASK` and continues using the supported subset.
+   MATCH IF: A reviewer should flag that file capability parsing must mask unknown capability bits instead of rejecting the xattr with `EINVAL`.

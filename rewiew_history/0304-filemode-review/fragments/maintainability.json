@@ -1,0 +1,42 @@
+[
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 205,
+    "persona": "maintainability",
+    "grounding": "no-bool-args",
+    "severity": "minor",
+    "problem": "`ruid_may_be_old_suid` is a boolean behavior selector: `check_uid_perm(..., false)` means setreuid-style rules while `check_uid_perm(..., true)` means setresuid-style rules. The call sites are not self-describing, and inverting the literal changes the permission predicate.",
+    "fix": "Replace the boolean with a small enum such as `enum RealUidRule { Setreuid, Setresuid }`, or split this into `check_reuid_perm` and `check_resuid_perm` so the call site names the rule being applied.",
+    "diff": "fn check_uid_perm(\n    &self,\n    ruid: Option<&Uid>,\n    euid: Option<&Uid>,\n    suid: Option<&Uid>,\n    ruid_may_be_old_suid: bool,\n) -> Result<()> {"
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 470,
+    "persona": "maintainability",
+    "grounding": "accurate-names",
+    "severity": "minor",
+    "problem": "`file_effective` reads like the file effective flag, but the value is a `CapSet` mask that is either all capabilities or empty. This is especially confusing because the same function also calls `FileCapabilities::has_effective_flag`.",
+    "fix": "Rename the local to make the type-level role explicit, for example `file_effective_mask`, and update the `new_effective` expression to use that name.",
+    "diff": "let file_effective = if (!no_root && exec_euid.is_root())\n    || file_capabilities.is_some_and(FileCapabilities::has_effective_flag)\n{\n    CapSet::all()\n} else {\n    CapSet::empty()\n};\n\nlet new_effective = (file_effective & new_permitted) | (!file_effective & AMBIENT_CAPSET);"
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 497,
+    "persona": "maintainability",
+    "grounding": "no-bool-args",
+    "severity": "minor",
+    "problem": "`rgid_may_be_old_sgid` is a boolean behavior selector with the same hidden setregid-vs-setresgid distinction as the UID helper. The `false` and `true` call sites do not explain which credential rule is being enforced.",
+    "fix": "Use a typed enum such as `enum RealGidRule { Setregid, Setresgid }`, or split this into separate `check_regid_perm` and `check_resgid_perm` helpers.",
+    "diff": "fn check_gid_perm(\n    &self,\n    rgid: Option<&Gid>,\n    egid: Option<&Gid>,\n    sgid: Option<&Gid>,\n    rgid_may_be_old_sgid: bool,\n) -> Result<()> {"
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 555,
+    "persona": "maintainability",
+    "grounding": "accurate-names",
+    "severity": "minor",
+    "problem": "The `set_fsgid_unchecked` parameter is named `fsuid` even though it is a `Gid` and is stored into `fsgid`; this directly mislabels the credential being updated.",
+    "fix": "Rename the parameter to `fsgid` and store that value.",
+    "diff": "fn set_fsgid_unchecked(&self, fsuid: Gid) {\n    self.fsgid.store(fsuid, Ordering::Relaxed);\n}"
+  }
+]

@@ -1,0 +1,9 @@
+# Expected defects
+
+1. location: kernel/src/process/credentials/credentials_.rs (persona: security, grounding: bug, severity: critical)
+   defect: `calculate_capsets_for_exec` computes `file_effective` with `(!no_root && exec_euid.is_root()) || file_capabilities.has_effective_flag()`. That grants a full effective capability set whenever exec makes the effective UID root, even if the executable also carries file capabilities. Linux treats the setuid-root plus file-capability case specially: for a non-root caller executing such a file, the file capabilities suppress the legacy setuid-root full-capability grant, and only the file-capability effective flag should make the permitted set effective.
+   MATCH IF: A reviewer should flag that setuid-root must not grant a full effective capability set when file capabilities are present for a non-root caller; only the file effective flag should make the permitted set effective.
+
+2. location: kernel/src/process/execve.rs (persona: security, grounding: bug, severity: major)
+   defect: `do_execve` computes `exec_euid` from `elf_file.mode()` and `elf_file.owner()` before the irreversible exec phase, and `prepare_capsets_for_exec` turns that value into cached `ExecCapSets`. Later, `apply_caps_from_exec` calls `set_uid_from_elf` and `set_gid_from_elf`, which re-read the inode mode, owner, and group before installing the already-computed capability sets. If the executable metadata changes between these reads, the final effective UID/GID and the installed capability sets can be derived from different file states.
+   MATCH IF: A reviewer should flag that exec capability sets are prepared from one executable mode/owner snapshot while the setuid/setgid transition later re-reads inode metadata, so concurrent metadata changes can make the installed capabilities inconsistent with the final credentials.

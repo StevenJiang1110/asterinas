@@ -1,0 +1,5 @@
+# Expected defects
+
+1. location: kernel/src/syscall/chroot.rs (persona: security, grounding: permission-check, severity: critical)
+   defect: `sys_chroot` validates that the path exists and is a directory, then immediately calls `path_resolver.set_root(path)`. It never checks whether the calling thread has `CAP_SYS_CHROOT` in its user namespace. Linux requires `chroot` to fail with `EPERM` when that capability is missing, because changing a process's root directory is a privileged operation. Without the check, an unprivileged process that can name a directory can update its root and bypass the intended capability gate.
+   MATCH IF: A reviewer should flag that `chroot` must require `CAP_SYS_CHROOT` before changing the process root, rather than allowing any caller that provides a directory path to call `set_root`.

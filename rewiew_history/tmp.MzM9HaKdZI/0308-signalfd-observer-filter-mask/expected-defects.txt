@@ -1,0 +1,5 @@
+# Expected defects
+
+1. location: kernel/src/syscall/signalfd.rs (persona: development, grounding: linux-compatibility, severity: major)
+   defect: `signalfd` treats the user-provided mask as the set of signals accepted by the file descriptor, storing it in `signals_mask` and notifying or reading only signals contained in that mask. However, the signal-queue observer registration passes that same accepted-signal mask to `SigEventsFilter::new`. `SigEventsFilter::filter` returns true when the event signal is not contained in its mask, so its mask represents signals to suppress, not signals to accept. Registering with `mask` therefore suppresses notifications for exactly the signals the signalfd is supposed to receive and wakes the file only for signals outside the signalfd mask.
+   MATCH IF: A reviewer should flag the mask-polarity mismatch between signalfd's accepted-signal mask and the signal-queue observer filter, where notifications for signals accepted by the signalfd are filtered out.

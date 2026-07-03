@@ -1,0 +1,9 @@
+# Expected defects
+
+1. location: kernel/src/process/credentials/credentials_.rs (persona: security, grounding: bug, severity: critical)
+   defect: `calculate_capsets_for_exec` computes `file_effective` with `(!no_root && exec_euid.is_root()) || file_capabilities.has_effective_flag()`. That grants a full effective capability set whenever exec makes the effective UID root, even if the executable also carries file capabilities. Linux treats the setuid-root plus file-capability case specially: for a non-root caller executing such a file, the file capabilities suppress the legacy setuid-root full-capability grant, and only the file-capability effective flag should make the permitted set effective.
+   MATCH IF: A reviewer should flag that setuid-root must not grant a full effective capability set when file capabilities are present for a non-root caller; only the file effective flag should make the permitted set effective.
+
+2. location: kernel/src/process/credentials/file_capabilities.rs (persona: security, grounding: bug, severity: critical)
+   defect: `FileCapabilities::applies_to_root_uid` uses `self.root_uid.is_none_or(|stored_root_uid| stored_root_uid == root_uid)`. For V1/V2 file capability xattrs, `root_uid` is absent, so this accepts any current user-namespace owner UID. Linux treats legacy file capability xattrs without an embedded root ID as bound to UID 0 in the initial user namespace; they should not apply to an arbitrary nonzero namespace owner.
+   MATCH IF: A reviewer should flag that legacy V1/V2 file capability xattrs without an embedded root UID must match only UID 0 in the initial user namespace, not any namespace owner UID.

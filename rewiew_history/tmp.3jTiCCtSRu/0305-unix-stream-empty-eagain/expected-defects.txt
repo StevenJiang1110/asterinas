@@ -1,0 +1,5 @@
+# Expected defects
+
+1. location: kernel/src/net/socket/unix/stream/connected.rs (persona: development, grounding: bug, severity: major)
+   defect: In `Connected::try_read`, the auxiliary-data path can see `aux_len == 0` with no auxiliary entry when a UNIX stream receive buffer is empty. The new loop simply breaks in that case, leaving `read_tot_len == 0`; for non-SEQPACKET sockets it then reaches `debug_assert!(is_seqpacket || read_tot_len != 0)` and, in non-debug builds, can return a zero-length successful read instead of the stream receive semantics. The old `read_with` path was responsible for returning `EAGAIN` on an empty channel, so a reviewer should flag that the refactor bypasses that empty-buffer check in the auxiliary-data branch.
+   MATCH IF: A reviewer should flag that the `MSG_PEEK` auxiliary-data path must still return `EAGAIN` when the UNIX stream receive buffer is empty, instead of returning a zero-length success or reaching the debug assertion.

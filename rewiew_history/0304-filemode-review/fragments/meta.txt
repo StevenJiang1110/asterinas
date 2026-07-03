@@ -1,0 +1,9 @@
+mode=files
+files=kernel/src/process/credentials/credentials_.rs,kernel/src/process/credentials/file_capabilities.rs
+head=f5fc357bb-dirty
+branch=HEAD
+output=/tmp/tmp.2X20C5hgHO/wt1.on.md
+overwrite=1
+per_persona_context=yes
+date=2026-07-02
+title=Review kernel process credentials files
