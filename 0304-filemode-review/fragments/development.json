@@ -1,0 +1,52 @@
+[
+  {
+    "file": "kernel/src/process/credentials/file_capabilities.rs",
+    "line": 46,
+    "persona": "development",
+    "grounding": "bug",
+    "severity": "major",
+    "problem": "`read_from_inode` reads `security.capability` through the normal permission-checked xattr API. On ramfs, `get_xattr` checks `MAY_READ`, so a non-root process executing a mode `0111` file with file capabilities gets `EACCES` while the kernel is trying to load exec credentials, even though execute-only privileged binaries must still be executable.",
+    "fix": "Read `security.capability` through an internal xattr helper that bypasses user read permission for the exec credential calculation, or add an inode/xattr API specifically for kernel-internal security.capability reads and use it here.",
+    "diff": "42\t        let mut raw_value = [0u8; XATTR_CAPS_SZ_3];\n43\t        let mut value_writer = VmWriter::from(raw_value.as_mut_slice()).to_fallible();\n44\t        let xattr_name =\n45\t            xattr::XattrName::try_from_full_name(xattr::SECURITY_CAPABILITY_XATTR_NAME).unwrap();\n46\t        let value_len = match inode.get_xattr(xattr_name, &mut value_writer) {"
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 470,
+    "persona": "development",
+    "grounding": "bug",
+    "severity": "major",
+    "problem": "The setuid-root-with-file-capabilities exception is applied to the file permitted/inheritable sets but not to the effective bit. A non-root caller executing a setuid-root binary that has a `security.capability` xattr with `permitted=CAP_NET_BIND_SERVICE` and the effective flag clear will still get that capability in its effective set because `exec_euid` is root.",
+    "fix": "Exclude the setuid-root file-capability exception from the root effective-bit fast path, e.g. compute `let setuid_root_file_caps = has_file_capabilities && !self.ruid().is_root() && exec_euid.is_root();` and only treat root as effective when `!setuid_root_file_caps`.",
+    "diff": "453\t        // Linux treats root specially when the executable has no file capabilities, or when the\n454\t        // real UID is root. The setuid-root + file-capability exception is handled by excluding\n455\t        // the `euid == 0` fast path when a file capability xattr is present.\n456\t        let grant_root_file_sets =\n457\t            !no_root && (self.ruid().is_root() || (!has_file_capabilities && exec_euid.is_root()));\n...\n470\t        let file_effective = if (!no_root && exec_euid.is_root())\n471\t            || file_capabilities.is_some_and(FileCapabilities::has_effective_flag)"
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 306,
+    "persona": "development",
+    "grounding": "bug",
+    "severity": "major",
+    "problem": "`set_fsuid_unchecked` only clears file-related effective capabilities when fsuid changes from root to non-root; it never restores the permitted ones when fsuid changes back to root. A root process with permitted `CAP_DAC_OVERRIDE` that calls `setfsuid(1000)` and then `setfsuid(0)` permanently loses that effective capability until some unrelated UID transition resets the effective set.",
+    "fix": "Use one shared file-capability mask and add the reverse transition: when `!old_fsuid.is_root() && fsuid.is_root()`, OR `effective_capset` with `permitted_capset() & fsuid_cap_mask`.",
+    "diff": "302\t    fn set_fsuid_unchecked(&self, fsuid: Uid) {\n303\t        let old_fsuid = self.fsuid();\n304\t        self.fsuid.store(fsuid, Ordering::Relaxed);\n305\t\n306\t        if old_fsuid.is_root() && !fsuid.is_root() {\n307\t            // Reference: The \"Effect of user ID changes on capabilities\" section in\n308\t            // <https://man7.org/linux/man-pages/man7/capabilities.7.html>."
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 306,
+    "persona": "development",
+    "grounding": "bug",
+    "severity": "major",
+    "problem": "Filesystem-UID capability fixups ignore `SECBIT_NO_SETUID_FIXUP`. With that securebit set, changing fsuid from 0 to a nonzero UID should not adjust effective capabilities, but `set_fsuid_unchecked` still clears the file-related capabilities; `set_resuid_unchecked` also calls this before its `no_setuid_fixup` check.",
+    "fix": "Check `self.securebits().no_setuid_fixup()` before doing any fsuid capability adjustment, and ensure `set_resuid_unchecked` does not call a capability-adjusting fsuid path before honoring that securebit.",
+    "diff": "273\t        self.set_fsuid_unchecked(new_euid);\n274\t\n275\t        // If the `SECBIT_NO_SETUID_FIXUP` bit is set, do not adjust capabilities.\n276\t        // Reference: The \"SECBIT_NO_SETUID_FIXUP\" section in\n277\t        // <https://man7.org/linux/man-pages/man7/capabilities.7.html>.\n278\t        if self.securebits().no_setuid_fixup() {\n...\n306\t        if old_fsuid.is_root() && !fsuid.is_root() {"
+  },
+  {
+    "file": "kernel/src/process/credentials/credentials_.rs",
+    "line": 632,
+    "persona": "development",
+    "grounding": "bug",
+    "severity": "major",
+    "problem": "`set_keep_capabilities(false)` enforces locked securebits, but exec must always clear `SECBIT_KEEP_CAPS` even when `SECBIT_KEEP_CAPS_LOCKED` is set. The exec path calls this method after switching to the new image, so a process that locked KEEP_CAPS on can make exec fail at the no-return stage instead of successfully clearing only KEEP_CAPS and preserving the lock bit.",
+    "fix": "Add a separate exec-only helper that stores `self.securebits() - SecureBits::KEEP_CAPS` without rejecting locked KEEP_CAPS, and use that from exec instead of `set_keep_capabilities(false)`.",
+    "diff": "624\t    pub(super) fn set_keep_capabilities(&self, keep_capabilities: bool) -> Result<()> {\n625\t        let current_bits = self.securebits();\n626\t        let stored_bits = if !keep_capabilities {\n627\t            current_bits - SecureBits::KEEP_CAPS\n628\t        } else {\n629\t            current_bits | SecureBits::KEEP_CAPS\n630\t        };\n631\t\n632\t        self.securebits.try_store(stored_bits, Ordering::Relaxed)"
+  }
+]

@@ -1,0 +1,1021 @@
+# Pass contract
+
+You are a reviewer applying the persona guideline(s) included below to the change or files under review (the **REVIEW INPUT** at the very end of this prompt).
+Find as many real defects as possible
+— correctness bugs, `unsafe`/soundness violations,
+ABI/hardware hazards, and coding-guideline violations
+— without inventing issues; a false alarm is a real cost.
+
+For each persona block below, work that persona's concerns in the order its file gives.
+For each candidate rule, read its one-line gist first and drill into the full rule (its linked subsections) only on a suspected violation.
+Stay within the remit of the persona(s) you are given.
+
+Independently of rule-matching,
+**hunt for outright bugs by reasoning about the code**
+— off-by-one, reachable `unwrap`/panic,
+wrong predicate, overflow, data race,
+TOCTOU, missing input validation,
+ABI/alignment — and report them under the `bug` grounding even when no rule names them.
+Never stay silent about a real defect because "no guideline covers it".
+
+Be **adversarial**: before dismissing a suspected defect as safe,
+state the concrete input or interleaving that would trigger it.
+Report it unless you can show that case cannot happen.
+"It looks fine" is not a verdict.
+
+The REVIEW INPUT is the unit of review;
+you MAY read surrounding code in the working tree for extra context.
+
+## Output
+
+Output **only** a JSON array of comment objects (no prose around it):
+
+```json
+[{"file":"path/relative/to/repo.rs","line":42,"persona":"development","grounding":"lock-ordering","severity":"major",
+  "problem":"what is wrong, specific and concrete","fix":"the concrete change or snippet to apply",
+  "diff":"the few relevant lines (a diff hunk, or source lines in files mode)"}]
+```
+
+- `persona` — which persona section the comment belongs to (`maintainability`, `development`, `security`, `hardware`, `documentation`);
+  used to file the comment under the right section.
+  In a single-persona (fan-out) pass it is always that persona.
+- `grounding` — the guideline short-name you are invoking (e.g. `lock-ordering`),
+  or the literal `bug` for a defect no rule covers.
+- `severity` — **required**, one of `critical` (must fix) / `major` (should fix) / `minor` (worth fixing) / `nit` (optional or stylistic).
+- `problem` and `fix` are **both required** — every comment proposes a remedy.
+- Every field above is required on every comment; do not omit any.
+- `line` is the line the comment anchors to
+  — the post-change line in the commit's diff (`diff` mode),
+  or the file's line number (`files` mode).
+- For a finding about a **commit message** (`diff` mode shows each commit's message),
+  set `file` to the commit locus (e.g. `commit abc1234 message`),
+  omit `line`, and ground it in a commit-hygiene rule (`imperative-subject`, `atomic-commits`, …).
+- Report only issues within the included persona(s)' remit.
+  If you find nothing, output `[]`.
+
+===== PERSONA: maintainability =====
+
+# Maintainability persona
+
+**Review section:** Maintainability
+**Remit:** Is the shape of the change sound,
+and will the next reader understand it without archaeology?
+
+**Your guideline page (read only this, drill in on suspicion):**
+`book/src/to-contribute/coding-guidelines/for-maintainability/README.md`
+— subsections: `process.md`,
+`design.md`, `naming.md`, `layout.md`,
+`comments.md`, and `rust-specific/*` (naming, crates-and-modules, types-and-traits, functions-and-methods, attributes-and-macros, comments).
+
+**Concerns, in order:**
+
+1. Understand the change's intent and goal.
+2. Assess design and interface fit
+   — familiar conventions, hide implementation details, single responsibility.
+3. Check naming, comments, and layout,
+   including the Rust-Specific items (descriptive/accurate names, explain *why* in comments, one concept per file, small functions, narrow visibility, …).
+
+**Always-on:** commit hygiene (Process rules — `imperative-subject`, `atomic-commits`, `focused-prs`, `refactor-then-feature`) applies to every change.
+
+You own readability and structure,
+not runtime correctness (Correctness persona) or doc currency (Documentation persona).
+
+--- guideline page (book/src/to-contribute/coding-guidelines/for-maintainability/README.md) ---
+
+# For Maintainability
+
+*Is the shape of the change sound, and will the next reader understand it without archaeology?*
+
+This is the index of the **maintainability** guidelines.
+Each subsection is its own page,
+and each entry below links a stable `short-name` to its guideline,
+with a one-line gist so a reader (or a review tool) can grasp the guideline before opening it.
+
+## Index
+
+**[Design](design.md)**
+- [`single-responsibility`](design.md#single-responsibility): Each module, type, or function has one reason to change; keep functions small and one concept per file.
+- [`dry`](design.md#dry): Give every piece of knowledge a single representation; eliminate duplication once a pattern recurs.
+- [`information-hiding`](design.md#information-hiding): Hide details behind interfaces; expose only what consumers need.
+- [`open-closed`](design.md#open-closed): Extend stable modules through existing interfaces; don't add extension points preemptively.
+- [`least-surprise`](design.md#least-surprise): Names, types, and APIs behave as they suggest; prefer conventions users already know from Rust and Linux.
+- [`coupling-cohesion`](design.md#coupling-cohesion): Keep inter-module connections small and visible; keep each module focused on one purpose.
+- [`consistency`](design.md#consistency): Do similar things the same way; follow an existing convention rather than coining a competing one.
+- [`rust-native`](design.md#rust-native): Learn from Linux's design, not its C idioms; write idiomatic Rust.
+
+**[Process](process.md)**
+- [`imperative-subject`](process.md#imperative-subject): Write each commit subject in the imperative mood, ≤72 chars, verb-first ("Fix", "Add", "Remove"); backtick identifiers.
+- [`atomic-commits`](process.md#atomic-commits): One logical change per commit; don't mix unrelated changes.
+- [`refactor-then-feature`](process.md#refactor-then-feature): Put preparatory refactoring in its own earlier commit(s), separate from the feature.
+- [`focused-prs`](process.md#focused-prs): Keep a PR on a single topic; ensure CI passes before requesting review.
+
+**[Naming](naming.md)**
+- [`descriptive-names`](naming.md#descriptive-names): Names convey meaning at the point of use; avoid single letters and ambiguous abbreviations.
+- [`accurate-names`](naming.md#accurate-names): Avoid names that mislead about meaning, behavior, or side effects.
+- [`encode-units`](naming.md#encode-units): When the type doesn't carry the unit, put it in the name (`timeout_ns`, `size_pages`).
+- [`bool-names`](naming.md#bool-names): Name booleans as positive assertions (`is_`/`has_`/`can_`/…); avoid negation.
+- [`error-message-format`](naming.md#error-message-format): Lowercase start (unless a proper noun), specific, Linux man-page style for syscall errors.
+
+**[Layout](layout.md)**
+- [`top-down-reading`](layout.md#top-down-reading): Order a file top-down: entry points and core flow first, detail below.
+- [`logical-paragraphs`](layout.md#logical-paragraphs): Group related statements into blank-line-separated paragraphs, each one sub-step.
+
+**[Comments](comments.md)**
+- [`explain-why`](comments.md#explain-why): Comments explain intent (why), not what the code does; if you must explain "what", rewrite the code.
+- [`design-decisions`](comments.md#design-decisions): Document non-obvious choices, with rationale and alternatives considered.
+- [`cite-sources`](comments.md#cite-sources): Cite the source (POSIX, Linux man page, hardware manual, paper) for spec/algorithm behavior.
+
+**[Rust-Specific](rust-specific/)**
+- [Naming](rust-specific/naming.md)
+    - [`camel-case-acronyms`](rust-specific/naming.md#camel-case-acronyms): Use Rust CamelCase with title-cased acronyms (`Nvme`, not `NVME`).
+    - [`closure-fn-suffix`](rust-specific/naming.md#closure-fn-suffix): End a variable holding a closure or fn pointer with `_fn`.
+- [Crates & Modules](rust-specific/crates-and-modules.md)
+    - [`workspace-deps`](rust-specific/crates-and-modules.md#workspace-deps): Declare shared dependencies in `[workspace.dependencies]` and reference them with `.workspace = true`.
+    - [`module-docs`](rust-specific/crates-and-modules.md#module-docs): Open a major module with a `//!` doc: purpose, key types, relation to neighbors.
+    - [`narrow-visibility`](rust-specific/crates-and-modules.md#narrow-visibility): Start private; widen visibility only when an actual consumer requires it.
+    - [`qualified-fn-imports`](rust-specific/crates-and-modules.md#qualified-fn-imports): Import the parent module and call free functions/statics through it, not by bare name.
+- [Types & Traits](rust-specific/types-and-traits.md)
+    - [`rust-type-invariants`](rust-specific/types-and-traits.md#rust-type-invariants): Use the type system (newtypes, enums, generics) to make illegal states unrepresentable.
+    - [`enum-over-dyn`](rust-specific/types-and-traits.md#enum-over-dyn): For a closed set of variants, prefer an `enum` over `Box<dyn Trait>`.
+    - [`getter-encapsulation`](rust-specific/types-and-traits.md#getter-encapsulation): Prefer a getter over a public field; it preserves naming freedom and room for invariants.
+- [Functions & Methods](rust-specific/functions-and-methods.md)
+    - [`no-bool-args`](rust-specific/functions-and-methods.md#no-bool-args): Avoid boolean parameters that select behavior; split the function or use a typed enum.
+    - [`block-expressions`](rust-specific/functions-and-methods.md#block-expressions): Use a block expression to scope temporary state that only produces one value.
+    - [`minimize-nesting`](rust-specific/functions-and-methods.md#minimize-nesting): Flatten nesting past ~3 levels with early returns, guard clauses, `let…else`, `?`, `continue`.
+    - [`explain-variables`](rust-specific/functions-and-methods.md#explain-variables): Bind intermediate results of a complex expression to well-named variables.
+- [Attributes & Macros](rust-specific/attributes-and-macros.md)
+    - [`expect-dead-code`](rust-specific/attributes-and-macros.md#expect-dead-code): Allow `#[expect(dead_code)]` only for a planned, clear, simple future use.
+    - [`alphabetical-attrs`](rust-specific/attributes-and-macros.md#alphabetical-attrs): Sort outer attributes alphabetically; place `#[derive(...)]` last with sorted traits.
+    - [`narrow-lint-suppression`](rust-specific/attributes-and-macros.md#narrow-lint-suppression): Suppress a lint at the narrowest scope (item/method), not a whole type or module.
+    - [`macros-as-last-resort`](rust-specific/attributes-and-macros.md#macros-as-last-resort): Prefer functions and generics; use a macro only when the type system can't express the need.
+- [Comments](rust-specific/comments.md)
+    - [`rfc1574-summary`](rust-specific/comments.md#rfc1574-summary): First doc line is one sentence — a third-person verb for functions, a noun phrase for types/modules.
+    - [`comment-punctuation`](rust-specific/comments.md#comment-punctuation): End full-sentence comments with terminal punctuation.
+    - [`backtick-identifiers`](rust-specific/comments.md#backtick-identifiers): Wrap identifiers in doc comments in backticks; prefer rustdoc links where possible.
+    - [`no-impl-in-docs`](rust-specific/comments.md#no-impl-in-docs): Doc comments describe what an API does and how to use it, not its internal implementation.
+
+No **path-specific** guidelines yet.
+
+===== REVIEW INPUT =====
+
+===== kernel/src/process/credentials/credentials_.rs =====
+     1	// SPDX-License-Identifier: MPL-2.0
+     2	
+     3	use core::sync::atomic::Ordering;
+     4	
+     5	use ostd::sync::{PreemptDisabled, RwLockReadGuard, RwLockWriteGuard};
+     6	
+     7	use super::{
+     8	    FileCapabilities, Gid, SecureBits, Uid, group::AtomicGid, secure_bits::AtomicSecureBits,
+     9	    user::AtomicUid,
+    10	};
+    11	use crate::{
+    12	    prelude::*,
+    13	    process::credentials::{
+    14	        AMBIENT_CAPSET,
+    15	        capabilities::{AtomicCapSet, CapSet},
+    16	    },
+    17	};
+    18	
+    19	#[derive(Debug)]
+    20	pub(super) struct Credentials_ {
+    21	    /// The real user ID.
+    22	    ///
+    23	    /// This is the user to which the process belongs.
+    24	    ruid: AtomicUid,
+    25	    /// The effective user ID.
+    26	    ///
+    27	    /// This is used to determine the permissions granted to a process when it tries to perform
+    28	    /// various operations (e.g., system calls).
+    29	    euid: AtomicUid,
+    30	    /// The saved-set user ID.
+    31	    ///
+    32	    /// This saves a copy of the effective user ID that were set when the program was executed.
+    33	    suid: AtomicUid,
+    34	    /// The filesystem user ID.
+    35	    ///
+    36	    /// This is used to determine permissions for accessing files.
+    37	    fsuid: AtomicUid,
+    38	
+    39	    /// The real group ID.
+    40	    ///
+    41	    /// This is the group to which the process belongs.
+    42	    rgid: AtomicGid,
+    43	    /// The effective group ID.
+    44	    ///
+    45	    /// This is used to determine the permissions granted to a process when it tries to perform
+    46	    /// various operations (e.g., system calls).
+    47	    egid: AtomicGid,
+    48	    /// The saved-set group ID.
+    49	    ///
+    50	    /// This saves a copy of the effective group ID that were set when the program was executed.
+    51	    sgid: AtomicGid,
+    52	    /// The filesystem group ID.
+    53	    ///
+    54	    /// This is used to determine permissions for accessing files.
+    55	    fsgid: AtomicGid,
+    56	
+    57	    /// A set of additional groups to which a process belongs.
+    58	    supplementary_gids: RwLock<BTreeSet<Gid>>,
+    59	
+    60	    // The Linux capabilities. They are not the capability (in `static_cap.rs`) that is enforced on
+    61	    // Rust objects.
+    62	    //
+    63	    /// Capabilities that child processes can inherit.
+    64	    inheritable_capset: AtomicCapSet,
+    65	    /// Capabilities that a process can potentially be granted.
+    66	    ///
+    67	    /// It defines the maximum set of privileges that the process could possibly have. Even if the
+    68	    /// process is not currently using these privileges, it has the potential ability to enable
+    69	    /// them.
+    70	    permitted_capset: AtomicCapSet,
+    71	    /// Capabilities that a process can actually use.
+    72	    effective_capset: AtomicCapSet,
+    73	    /// Capabilities that limit privileges granted during `execve()` and may be added to the
+    74	    /// inheritable set.
+    75	    bounding_capset: AtomicCapSet,
+    76	
+    77	    /// Secure bits.
+    78	    securebits: AtomicSecureBits,
+    79	}
+    80	
+    81	/// Capability sets computed for a pending `execve()`.
+    82	#[derive(Clone, Copy, Debug)]
+    83	pub(in crate::process) struct ExecCapSets {
+    84	    permitted: CapSet,
+    85	    effective: CapSet,
+    86	}
+    87	
+    88	impl Credentials_ {
+    89	    /// Creates a new `Credentials_`.
+    90	    ///
+    91	    /// The real, effective, saved set, and filesystem IDs will be initialized to the same ID.
+    92	    pub(super) fn new(uid: Uid, gid: Gid, capset: CapSet) -> Self {
+    93	        let mut supplementary_gids = BTreeSet::new();
+    94	        supplementary_gids.insert(gid);
+    95	
+    96	        Self {
+    97	            ruid: AtomicUid::new(uid),
+    98	            euid: AtomicUid::new(uid),
+    99	            suid: AtomicUid::new(uid),
+   100	            fsuid: AtomicUid::new(uid),
+   101	            rgid: AtomicGid::new(gid),
+   102	            egid: AtomicGid::new(gid),
+   103	            sgid: AtomicGid::new(gid),
+   104	            fsgid: AtomicGid::new(gid),
+   105	            supplementary_gids: RwLock::new(supplementary_gids),
+   106	            inheritable_capset: AtomicCapSet::new(CapSet::empty()),
+   107	            permitted_capset: AtomicCapSet::new(capset),
+   108	            effective_capset: AtomicCapSet::new(capset),
+   109	            bounding_capset: AtomicCapSet::new(CapSet::all()),
+   110	            securebits: AtomicSecureBits::new(SecureBits::new_empty()),
+   111	        }
+   112	    }
+   113	
+   114	    //  ******* UID methods *******
+   115	
+   116	    pub(super) fn ruid(&self) -> Uid {
+   117	        self.ruid.load(Ordering::Relaxed)
+   118	    }
+   119	
+   120	    pub(super) fn euid(&self) -> Uid {
+   121	        self.euid.load(Ordering::Relaxed)
+   122	    }
+   123	
+   124	    pub(super) fn suid(&self) -> Uid {
+   125	        self.suid.load(Ordering::Relaxed)
+   126	    }
+   127	
+   128	    pub(super) fn fsuid(&self) -> Uid {
+   129	        self.fsuid.load(Ordering::Relaxed)
+   130	    }
+   131	
+   132	    pub(super) fn set_uid(&self, uid: Uid) -> Result<()> {
+   133	        if self.effective_capset().contains(CapSet::SETUID) {
+   134	            self.set_resuid_unchecked(Some(uid), Some(uid), Some(uid));
+   135	            Ok(())
+   136	        } else {
+   137	            self.set_resuid(None, Some(uid), None)
+   138	        }
+   139	    }
+   140	
+   141	    pub(super) fn set_reuid(&self, ruid: Option<Uid>, euid: Option<Uid>) -> Result<()> {
+   142	        self.check_uid_perm(ruid.as_ref(), euid.as_ref(), None, false)?;
+   143	
+   144	        let should_set_suid = ruid.is_some() || euid.is_some_and(|euid| euid != self.ruid());
+   145	        let suid = if should_set_suid {
+   146	            Some(euid.unwrap_or_else(|| self.euid()))
+   147	        } else {
+   148	            None
+   149	        };
+   150	        self.set_resuid_unchecked(ruid, euid, suid);
+   151	
+   152	        Ok(())
+   153	    }
+   154	
+   155	    pub(super) fn set_resuid(
+   156	        &self,
+   157	        ruid: Option<Uid>,
+   158	        euid: Option<Uid>,
+   159	        suid: Option<Uid>,
+   160	    ) -> Result<()> {
+   161	        self.check_uid_perm(ruid.as_ref(), euid.as_ref(), suid.as_ref(), true)?;
+   162	
+   163	        self.set_resuid_unchecked(ruid, euid, suid);
+   164	
+   165	        Ok(())
+   166	    }
+   167	
+   168	    pub(super) fn set_fsuid(&self, fsuid: Option<Uid>) -> Result<Uid, Uid> {
+   169	        let old_fsuid = self.fsuid();
+   170	
+   171	        let Some(fsuid) = fsuid else {
+   172	            return Ok(old_fsuid);
+   173	        };
+   174	
+   175	        if self.effective_capset().contains(CapSet::SETUID) {
+   176	            self.set_fsuid_unchecked(fsuid);
+   177	            return Ok(old_fsuid);
+   178	        }
+   179	
+   180	        if fsuid != self.ruid() && fsuid != self.euid() && fsuid != self.suid() {
+   181	            // The new filesystem UID is not one of the associated UIDs.
+   182	            return Err(old_fsuid);
+   183	        }
+   184	
+   185	        self.set_fsuid_unchecked(fsuid);
+   186	
+   187	        Ok(old_fsuid)
+   188	    }
+   189	
+   190	    pub(super) fn set_euid(&self, euid: Uid) {
+   191	        self.set_resuid_unchecked(None, Some(euid), None);
+   192	    }
+   193	
+   194	    pub(super) fn set_suid(&self, suid: Uid) {
+   195	        self.set_resuid_unchecked(None, None, Some(suid));
+   196	    }
+   197	
+   198	    // For `setreuid`, the real UID can *NOT* be set to the old saved-set user ID,
+   199	    // For `setresuid`, the real UID can be set to the old saved-set user ID.
+   200	    fn check_uid_perm(
+   201	        &self,
+   202	        ruid: Option<&Uid>,
+   203	        euid: Option<&Uid>,
+   204	        suid: Option<&Uid>,
+   205	        ruid_may_be_old_suid: bool,
+   206	    ) -> Result<()> {
+   207	        if self.effective_capset().contains(CapSet::SETUID) {
+   208	            return Ok(());
+   209	        }
+   210	
+   211	        if let Some(ruid) = ruid
+   212	            && *ruid != self.ruid()
+   213	            && *ruid != self.euid()
+   214	            && (!ruid_may_be_old_suid || *ruid != self.suid())
+   215	        {
+   216	            return_errno_with_message!(
+   217	                Errno::EPERM,
+   218	                "the new real UID is not one of the associated UIDs"
+   219	            );
+   220	        }
+   221	
+   222	        if let Some(euid) = euid
+   223	            && *euid != self.ruid()
+   224	            && *euid != self.euid()
+   225	            && *euid != self.suid()
+   226	        {
+   227	            return_errno_with_message!(
+   228	                Errno::EPERM,
+   229	                "the new effective UID is not one of the associated UIDs"
+   230	            )
+   231	        }
+   232	
+   233	        if let Some(suid) = suid
+   234	            && *suid != self.ruid()
+   235	            && *suid != self.euid()
+   236	            && *suid != self.suid()
+   237	        {
+   238	            return_errno_with_message!(
+   239	                Errno::EPERM,
+   240	                "the new saved-set UID is not one of the associated UIDs"
+   241	            )
+   242	        }
+   243	
+   244	        Ok(())
+   245	    }
+   246	
+   247	    fn set_resuid_unchecked(&self, ruid: Option<Uid>, euid: Option<Uid>, suid: Option<Uid>) {
+   248	        let old_ruid = self.ruid();
+   249	        let old_euid = self.euid();
+   250	        let old_suid = self.suid();
+   251	
+   252	        let new_ruid = if let Some(ruid) = ruid {
+   253	            self.ruid.store(ruid, Ordering::Relaxed);
+   254	            ruid
+   255	        } else {
+   256	            old_ruid
+   257	        };
+   258	
+   259	        let new_euid = if let Some(euid) = euid {
+   260	            self.euid.store(euid, Ordering::Relaxed);
+   261	            euid
+   262	        } else {
+   263	            old_euid
+   264	        };
+   265	
+   266	        let new_suid = if let Some(suid) = suid {
+   267	            self.suid.store(suid, Ordering::Relaxed);
+   268	            suid
+   269	        } else {
+   270	            old_suid
+   271	        };
+   272	
+   273	        self.set_fsuid_unchecked(new_euid);
+   274	
+   275	        // If the `SECBIT_NO_SETUID_FIXUP` bit is set, do not adjust capabilities.
+   276	        // Reference: The "SECBIT_NO_SETUID_FIXUP" section in
+   277	        // <https://man7.org/linux/man-pages/man7/capabilities.7.html>.
+   278	        if self.securebits().no_setuid_fixup() {
+   279	            return;
+   280	        }
+   281	
+   282	        // Begin to adjust capabilities.
+   283	        // Reference: The "Effect of user ID changes on capabilities" section in
+   284	        // <https://man7.org/linux/man-pages/man7/capabilities.7.html>.
+   285	
+   286	        let had_root = old_ruid.is_root() || old_euid.is_root() || old_suid.is_root();
+   287	        let all_nonroot = !new_ruid.is_root() && !new_euid.is_root() && !new_suid.is_root();
+   288	        if had_root && all_nonroot && !self.keep_capabilities() {
+   289	            self.set_permitted_capset(CapSet::empty());
+   290	            // TODO: Clear ambient capabilities when we support it. Note that ambient capabilities
+   291	            // should be cleared even if `keep_capabilities` is true.
+   292	        }
+   293	
+   294	        if old_euid.is_root() && !new_euid.is_root() {
+   295	            self.set_effective_capset(CapSet::empty());
+   296	        } else if !old_euid.is_root() && new_euid.is_root() {
+   297	            let permitted = self.permitted_capset();
+   298	            self.set_effective_capset(permitted);
+   299	        }
+   300	    }
+   301	
+   302	    fn set_fsuid_unchecked(&self, fsuid: Uid) {
+   303	        let old_fsuid = self.fsuid();
+   304	        self.fsuid.store(fsuid, Ordering::Relaxed);
+   305	
+   306	        if old_fsuid.is_root() && !fsuid.is_root() {
+   307	            // Reference: The "Effect of user ID changes on capabilities" section in
+   308	            // <https://man7.org/linux/man-pages/man7/capabilities.7.html>.
+   309	            let cap_to_remove = CapSet::CHOWN
+   310	                | CapSet::DAC_OVERRIDE
+   311	                | CapSet::FOWNER
+   312	                | CapSet::DAC_READ_SEARCH
+   313	                | CapSet::FSETID
+   314	                | CapSet::LINUX_IMMUTABLE
+   315	                | CapSet::MAC_OVERRIDE
+   316	                | CapSet::MKNOD;
+   317	            let old_cap = self.effective_capset();
+   318	            self.set_effective_capset(old_cap - cap_to_remove);
+   319	        }
+   320	    }
+   321	
+   322	    //  ******* GID methods *******
+   323	
+   324	    pub(super) fn rgid(&self) -> Gid {
+   325	        self.rgid.load(Ordering::Relaxed)
+   326	    }
+   327	
+   328	    pub(super) fn egid(&self) -> Gid {
+   329	        self.egid.load(Ordering::Relaxed)
+   330	    }
+   331	
+   332	    pub(super) fn sgid(&self) -> Gid {
+   333	        self.sgid.load(Ordering::Relaxed)
+   334	    }
+   335	
+   336	    pub(super) fn fsgid(&self) -> Gid {
+   337	        self.fsgid.load(Ordering::Relaxed)
+   338	    }
+   339	
+   340	    pub(super) fn set_gid(&self, gid: Gid) -> Result<()> {
+   341	        if self.effective_capset().contains(CapSet::SETGID) {
+   342	            self.set_resgid_unchecked(Some(gid), Some(gid), Some(gid));
+   343	            Ok(())
+   344	        } else {
+   345	            self.set_resgid(None, Some(gid), None)
+   346	        }
+   347	    }
+   348	
+   349	    pub(super) fn set_regid(&self, rgid: Option<Gid>, egid: Option<Gid>) -> Result<()> {
+   350	        self.check_gid_perm(rgid.as_ref(), egid.as_ref(), None, false)?;
+   351	
+   352	        let should_set_sgid = rgid.is_some() || egid.is_some_and(|egid| egid != self.rgid());
+   353	        let sgid = if should_set_sgid {
+   354	            Some(egid.unwrap_or_else(|| self.egid()))
+   355	        } else {
+   356	            None
+   357	        };
+   358	        self.set_resgid_unchecked(rgid, egid, sgid);
+   359	
+   360	        Ok(())
+   361	    }
+   362	
+   363	    pub(super) fn set_resgid(
+   364	        &self,
+   365	        rgid: Option<Gid>,
+   366	        egid: Option<Gid>,
+   367	        sgid: Option<Gid>,
+   368	    ) -> Result<()> {
+   369	        self.check_gid_perm(rgid.as_ref(), egid.as_ref(), sgid.as_ref(), true)?;
+   370	
+   371	        self.set_resgid_unchecked(rgid, egid, sgid);
+   372	
+   373	        Ok(())
+   374	    }
+   375	
+   376	    pub(super) fn set_fsgid(&self, fsgid: Option<Gid>) -> Result<Gid, Gid> {
+   377	        let old_fsgid = self.fsgid();
+   378	
+   379	        let Some(fsgid) = fsgid else {
+   380	            return Ok(old_fsgid);
+   381	        };
+   382	
+   383	        if fsgid == old_fsgid {
+   384	            return Ok(old_fsgid);
+   385	        }
+   386	
+   387	        if self.effective_capset().contains(CapSet::SETGID) {
+   388	            self.set_fsgid_unchecked(fsgid);
+   389	            return Ok(old_fsgid);
+   390	        }
+   391	
+   392	        if fsgid != self.rgid() && fsgid != self.egid() && fsgid != self.sgid() {
+   393	            // The new filesystem GID is not one of the associated GIDs.
+   394	            return Err(old_fsgid);
+   395	        }
+   396	
+   397	        self.set_fsgid_unchecked(fsgid);
+   398	
+   399	        Ok(old_fsgid)
+   400	    }
+   401	
+   402	    pub(super) fn set_egid(&self, egid: Gid) {
+   403	        self.set_resgid_unchecked(None, Some(egid), None);
+   404	    }
+   405	
+   406	    pub(super) fn set_sgid(&self, sgid: Gid) {
+   407	        self.set_resgid_unchecked(None, None, Some(sgid));
+   408	    }
+   409	
+   410	    /// Computes and validates the capability sets for `execve()`.
+   411	    pub(super) fn prepare_capsets_for_exec(
+   412	        &self,
+   413	        file_capabilities: Option<FileCapabilities>,
+   414	        exec_euid: Uid,
+   415	    ) -> Result<ExecCapSets> {
+   416	        let capsets = self.calculate_capsets_for_exec(file_capabilities, exec_euid);
+   417	
+   418	        // Linux performs this safety check only for capability-dumb binaries, which use the
+   419	        // effective flag to request that every permitted file capability becomes effective.
+   420	        let Some(file_capabilities) =
+   421	            file_capabilities.filter(|file_capabilities| file_capabilities.has_effective_flag())
+   422	        else {
+   423	            return Ok(capsets);
+   424	        };
+   425	
+   426	        if !capsets.permitted.contains(file_capabilities.permitted()) {
+   427	            return_errno_with_message!(
+   428	                Errno::EPERM,
+   429	                "the executable requests file capabilities outside the current bounding set"
+   430	            );
+   431	        }
+   432	
+   433	        Ok(capsets)
+   434	    }
+   435	
+   436	    /// Applies previously computed capability sets for `execve()`.
+   437	    pub(super) fn update_capsets_for_exec(&self, capsets: ExecCapSets) {
+   438	        self.set_permitted_capset(capsets.permitted);
+   439	        self.set_effective_capset(capsets.effective);
+   440	    }
+   441	
+   442	    fn calculate_capsets_for_exec(
+   443	        &self,
+   444	        file_capabilities: Option<FileCapabilities>,
+   445	        exec_euid: Uid,
+   446	    ) -> ExecCapSets {
+   447	        // Reference: The "Transformation of capabilities during execve()" section and
+   448	        // the "Capabilities and execution of programs by root" section in
+   449	        // <https://man7.org/linux/man-pages/man7/capabilities.7.html>.
+   450	        let no_root = self.securebits().no_root();
+   451	        let has_file_capabilities = file_capabilities.is_some();
+   452	
+   453	        // Linux treats root specially when the executable has no file capabilities, or when the
+   454	        // real UID is root. The setuid-root + file-capability exception is handled by excluding
+   455	        // the `euid == 0` fast path when a file capability xattr is present.
+   456	        let grant_root_file_sets =
+   457	            !no_root && (self.ruid().is_root() || (!has_file_capabilities && exec_euid.is_root()));
+   458	
+   459	        let file_permitted = if grant_root_file_sets {
+   460	            CapSet::all()
+   461	        } else {
+   462	            file_capabilities.map_or(CapSet::empty(), FileCapabilities::permitted)
+   463	        };
+   464	        let file_inheritable = if grant_root_file_sets {
+   465	            CapSet::all()
+   466	        } else {
+   467	            file_capabilities.map_or(CapSet::empty(), FileCapabilities::inheritable)
+   468	        };
+   469	
+   470	        let file_effective = if (!no_root && exec_euid.is_root())
+   471	            || file_capabilities.is_some_and(FileCapabilities::has_effective_flag)
+   472	        {
+   473	            CapSet::all()
+   474	        } else {
+   475	            CapSet::empty()
+   476	        };
+   477	
+   478	        let new_permitted = (self.inheritable_capset() & file_inheritable)
+   479	            | (file_permitted & self.bounding_capset())
+   480	            | AMBIENT_CAPSET;
+   481	
+   482	        let new_effective = (file_effective & new_permitted) | (!file_effective & AMBIENT_CAPSET);
+   483	
+   484	        ExecCapSets {
+   485	            permitted: new_permitted,
+   486	            effective: new_effective,
+   487	        }
+   488	    }
+   489	
+   490	    // For `setregid`, the real GID can *NOT* be set to the old saved-set GID,
+   491	    // For `setresgid`, the real GID can be set to the old saved-set GID.
+   492	    fn check_gid_perm(
+   493	        &self,
+   494	        rgid: Option<&Gid>,
+   495	        egid: Option<&Gid>,
+   496	        sgid: Option<&Gid>,
+   497	        rgid_may_be_old_sgid: bool,
+   498	    ) -> Result<()> {
+   499	        if self.effective_capset().contains(CapSet::SETGID) {
+   500	            return Ok(());
+   501	        }
+   502	
+   503	        if let Some(rgid) = rgid
+   504	            && *rgid != self.rgid()
+   505	            && *rgid != self.egid()
+   506	            && (!rgid_may_be_old_sgid || *rgid != self.sgid())
+   507	        {
+   508	            return_errno_with_message!(
+   509	                Errno::EPERM,
+   510	                "the new real GID is not one of the associated GIDs"
+   511	            );
+   512	        }
+   513	
+   514	        if let Some(egid) = egid
+   515	            && *egid != self.rgid()
+   516	            && *egid != self.egid()
+   517	            && *egid != self.sgid()
+   518	        {
+   519	            return_errno_with_message!(
+   520	                Errno::EPERM,
+   521	                "the new effective GID is not one of the associated GIDs"
+   522	            )
+   523	        }
+   524	
+   525	        if let Some(sgid) = sgid
+   526	            && *sgid != self.rgid()
+   527	            && *sgid != self.egid()
+   528	            && *sgid != self.sgid()
+   529	        {
+   530	            return_errno_with_message!(
+   531	                Errno::EPERM,
+   532	                "the new saved-set GID is not one of the associated GIDs"
+   533	            )
+   534	        }
+   535	
+   536	        Ok(())
+   537	    }
+   538	
+   539	    fn set_resgid_unchecked(&self, rgid: Option<Gid>, egid: Option<Gid>, sgid: Option<Gid>) {
+   540	        if let Some(rgid) = rgid {
+   541	            self.rgid.store(rgid, Ordering::Relaxed);
+   542	        }
+   543	
+   544	        if let Some(egid) = egid {
+   545	            self.egid.store(egid, Ordering::Relaxed);
+   546	        }
+   547	
+   548	        if let Some(sgid) = sgid {
+   549	            self.sgid.store(sgid, Ordering::Relaxed);
+   550	        }
+   551	
+   552	        self.set_fsgid_unchecked(self.egid());
+   553	    }
+   554	
+   555	    fn set_fsgid_unchecked(&self, fsuid: Gid) {
+   556	        self.fsgid.store(fsuid, Ordering::Relaxed);
+   557	    }
+   558	
+   559	    //  ******* Supplementary Groups methods *******
+   560	
+   561	    pub(super) fn groups(&self) -> RwLockReadGuard<'_, BTreeSet<Gid>, PreemptDisabled> {
+   562	        self.supplementary_gids.read()
+   563	    }
+   564	
+   565	    pub(super) fn groups_mut(&self) -> RwLockWriteGuard<'_, BTreeSet<Gid>, PreemptDisabled> {
+   566	        self.supplementary_gids.write()
+   567	    }
+   568	
+   569	    //  ******* Linux Capabilities methods *******
+   570	
+   571	    pub(super) fn inheritable_capset(&self) -> CapSet {
+   572	        self.inheritable_capset.load(Ordering::Relaxed)
+   573	    }
+   574	
+   575	    pub(super) fn permitted_capset(&self) -> CapSet {
+   576	        self.permitted_capset.load(Ordering::Relaxed)
+   577	    }
+   578	
+   579	    pub(super) fn effective_capset(&self) -> CapSet {
+   580	        self.effective_capset.load(Ordering::Relaxed)
+   581	    }
+   582	
+   583	    pub(super) fn bounding_capset(&self) -> CapSet {
+   584	        self.bounding_capset.load(Ordering::Relaxed)
+   585	    }
+   586	
+   587	    pub(super) fn set_inheritable_capset(&self, inheritable_capset: CapSet) {
+   588	        self.inheritable_capset
+   589	            .store(inheritable_capset, Ordering::Relaxed);
+   590	    }
+   591	
+   592	    pub(super) fn set_permitted_capset(&self, permitted_capset: CapSet) {
+   593	        self.permitted_capset
+   594	            .store(permitted_capset, Ordering::Relaxed);
+   595	    }
+   596	
+   597	    pub(super) fn set_effective_capset(&self, effective_capset: CapSet) {
+   598	        self.effective_capset
+   599	            .store(effective_capset, Ordering::Relaxed);
+   600	    }
+   601	
+   602	    fn set_bounding_capset(&self, bounding_capset: CapSet) {
+   603	        self.bounding_capset
+   604	            .store(bounding_capset, Ordering::Relaxed);
+   605	    }
+   606	
+   607	    pub(super) fn drop_bounding_capability(&self, capability: CapSet) -> Result<()> {
+   608	        if !self.effective_capset().contains(CapSet::SETPCAP) {
+   609	            return_errno_with_message!(
+   610	                Errno::EPERM,
+   611	                "only threads with CAP_SETPCAP can drop capabilities from the bounding set"
+   612	            );
+   613	        }
+   614	
+   615	        let new_bounding_capset = self.bounding_capset() - capability;
+   616	        self.set_bounding_capset(new_bounding_capset);
+   617	        Ok(())
+   618	    }
+   619	
+   620	    pub(super) fn keep_capabilities(&self) -> bool {
+   621	        self.securebits.load(Ordering::Relaxed).keep_capabilities()
+   622	    }
+   623	
+   624	    pub(super) fn set_keep_capabilities(&self, keep_capabilities: bool) -> Result<()> {
+   625	        let current_bits = self.securebits();
+   626	        let stored_bits = if !keep_capabilities {
+   627	            current_bits - SecureBits::KEEP_CAPS
+   628	        } else {
+   629	            current_bits | SecureBits::KEEP_CAPS
+   630	        };
+   631	
+   632	        self.securebits.try_store(stored_bits, Ordering::Relaxed)
+   633	    }
+   634	
+   635	    //  ******* Secure Bits methods *******
+   636	
+   637	    pub(super) fn securebits(&self) -> SecureBits {
+   638	        self.securebits.load(Ordering::Relaxed)
+   639	    }
+   640	
+   641	    pub(super) fn set_securebits(&self, securebits: SecureBits) -> Result<()> {
+   642	        if !self.effective_capset().contains(CapSet::SETPCAP) {
+   643	            return_errno_with_message!(
+   644	                Errno::EPERM,
+   645	                "only threads with CAP_SETPCAP can change secure bits"
+   646	            );
+   647	        }
+   648	
+   649	        self.securebits.try_store(securebits, Ordering::Relaxed)
+   650	    }
+   651	}
+   652	
+   653	impl Clone for Credentials_ {
+   654	    fn clone(&self) -> Self {
+   655	        Self {
+   656	            ruid: self.ruid.clone(),
+   657	            euid: self.euid.clone(),
+   658	            suid: self.suid.clone(),
+   659	            fsuid: self.fsuid.clone(),
+   660	            rgid: self.rgid.clone(),
+   661	            egid: self.egid.clone(),
+   662	            sgid: self.sgid.clone(),
+   663	            fsgid: self.fsgid.clone(),
+   664	            supplementary_gids: RwLock::new(self.supplementary_gids.read().clone()),
+   665	            inheritable_capset: self.inheritable_capset.clone(),
+   666	            permitted_capset: self.permitted_capset.clone(),
+   667	            effective_capset: self.effective_capset.clone(),
+   668	            bounding_capset: self.bounding_capset.clone(),
+   669	            securebits: self.securebits.clone(),
+   670	        }
+   671	    }
+   672	}
+
+===== kernel/src/process/credentials/file_capabilities.rs =====
+     1	// SPDX-License-Identifier: MPL-2.0
+     2	
+     3	use super::{Uid, capabilities::CapSet};
+     4	use crate::{
+     5	    fs::vfs::{inode::Inode, xattr},
+     6	    prelude::*,
+     7	};
+     8	
+     9	const VFS_CAP_REVISION_MASK: u32 = 0xff00_0000;
+    10	const VFS_CAP_FLAGS_MASK: u32 = 0x00ff_ffff;
+    11	
+    12	#[repr(u32)]
+    13	#[derive(Clone, Copy, Debug, Eq, PartialEq, TryFromInt)]
+    14	enum VfsCapRevision {
+    15	    V1 = 0x0100_0000,
+    16	    V2 = 0x0200_0000,
+    17	    V3 = 0x0300_0000,
+    18	}
+    19	
+    20	bitflags! {
+    21	    struct VfsCapFlags: u32 {
+    22	        const EFFECTIVE = 0x0000_0001;
+    23	    }
+    24	}
+    25	
+    26	const XATTR_CAPS_SZ_1: usize = 3 * size_of::<u32>();
+    27	const XATTR_CAPS_SZ_2: usize = 5 * size_of::<u32>();
+    28	const XATTR_CAPS_SZ_3: usize = 6 * size_of::<u32>();
+    29	
+    30	/// File capabilities loaded from the `security.capability` xattr.
+    31	#[derive(Clone, Copy, Debug)]
+    32	pub(in crate::process) struct FileCapabilities {
+    33	    permitted: CapSet,
+    34	    inheritable: CapSet,
+    35	    has_effective_flag: bool,
+    36	    root_uid: Option<Uid>,
+    37	}
+    38	
+    39	impl FileCapabilities {
+    40	    /// Reads file capabilities from an inode's `security.capability` xattr.
+    41	    pub(in crate::process) fn read_from_inode(inode: &Arc<dyn Inode>) -> Result<Option<Self>> {
+    42	        let mut raw_value = [0u8; XATTR_CAPS_SZ_3];
+    43	        let mut value_writer = VmWriter::from(raw_value.as_mut_slice()).to_fallible();
+    44	        let xattr_name =
+    45	            xattr::XattrName::try_from_full_name(xattr::SECURITY_CAPABILITY_XATTR_NAME).unwrap();
+    46	        let value_len = match inode.get_xattr(xattr_name, &mut value_writer) {
+    47	            Ok(value_len) => value_len,
+    48	            Err(error) if matches!(error.error(), Errno::ENODATA | Errno::EOPNOTSUPP) => {
+    49	                return Ok(None);
+    50	            }
+    51	            Err(error) => return Err(error),
+    52	        };
+    53	
+    54	        Self::parse(&raw_value[..value_len]).map(Some)
+    55	    }
+    56	
+    57	    pub(in crate::process) const fn permitted(self) -> CapSet {
+    58	        self.permitted
+    59	    }
+    60	
+    61	    pub(in crate::process) const fn inheritable(self) -> CapSet {
+    62	        self.inheritable
+    63	    }
+    64	
+    65	    pub(in crate::process) const fn has_effective_flag(self) -> bool {
+    66	        self.has_effective_flag
+    67	    }
+    68	
+    69	    pub(in crate::process) fn applies_to_root_uid(self, root_uid: Uid) -> bool {
+    70	        self.root_uid
+    71	            .is_none_or(|stored_root_uid| stored_root_uid == root_uid)
+    72	    }
+    73	
+    74	    fn parse(raw_value: &[u8]) -> Result<Self> {
+    75	        let magic_etc = read_u32_le(raw_value, 0)?;
+    76	        let (revision, flags) = parse_revision_and_flags(magic_etc)?;
+    77	
+    78	        let (expected_len, permitted, inheritable, root_uid) = match revision {
+    79	            VfsCapRevision::V1 => {
+    80	                let Ok(permitted) = CapSet::try_from_lo_hi(read_u32_le(raw_value, 1)?, 0) else {
+    81	                    return_errno_with_message!(
+    82	                        Errno::EINVAL,
+    83	                        "file capabilities contain unsupported capability bits"
+    84	                    );
+    85	                };
+    86	                let Ok(inheritable) = CapSet::try_from_lo_hi(read_u32_le(raw_value, 2)?, 0) else {
+    87	                    return_errno_with_message!(
+    88	                        Errno::EINVAL,
+    89	                        "file capabilities contain unsupported capability bits"
+    90	                    );
+    91	                };
+    92	                (XATTR_CAPS_SZ_1, permitted, inheritable, None)
+    93	            }
+    94	            VfsCapRevision::V2 => {
+    95	                let Ok(permitted) =
+    96	                    CapSet::try_from_lo_hi(read_u32_le(raw_value, 1)?, read_u32_le(raw_value, 3)?)
+    97	                else {
+    98	                    return_errno_with_message!(
+    99	                        Errno::EINVAL,
+   100	                        "file capabilities contain unsupported capability bits"
+   101	                    );
+   102	                };
+   103	                let Ok(inheritable) =
+   104	                    CapSet::try_from_lo_hi(read_u32_le(raw_value, 2)?, read_u32_le(raw_value, 4)?)
+   105	                else {
+   106	                    return_errno_with_message!(
+   107	                        Errno::EINVAL,
+   108	                        "file capabilities contain unsupported capability bits"
+   109	                    );
+   110	                };
+   111	                (XATTR_CAPS_SZ_2, permitted, inheritable, None)
+   112	            }
+   113	            VfsCapRevision::V3 => {
+   114	                let Ok(permitted) =
+   115	                    CapSet::try_from_lo_hi(read_u32_le(raw_value, 1)?, read_u32_le(raw_value, 3)?)
+   116	                else {
+   117	                    return_errno_with_message!(
+   118	                        Errno::EINVAL,
+   119	                        "file capabilities contain unsupported capability bits"
+   120	                    );
+   121	                };
+   122	                let Ok(inheritable) =
+   123	                    CapSet::try_from_lo_hi(read_u32_le(raw_value, 2)?, read_u32_le(raw_value, 4)?)
+   124	                else {
+   125	                    return_errno_with_message!(
+   126	                        Errno::EINVAL,
+   127	                        "file capabilities contain unsupported capability bits"
+   128	                    );
+   129	                };
+   130	                (
+   131	                    XATTR_CAPS_SZ_3,
+   132	                    permitted,
+   133	                    inheritable,
+   134	                    Some(Uid::new(read_u32_le(raw_value, 5)?)),
+   135	                )
+   136	            }
+   137	        };
+   138	
+   139	        if raw_value.len() != expected_len {
+   140	            return_errno_with_message!(
+   141	                Errno::EINVAL,
+   142	                "file capability xattr length does not match its revision"
+   143	            );
+   144	        }
+   145	
+   146	        Ok(Self {
+   147	            permitted,
+   148	            inheritable,
+   149	            has_effective_flag: flags.contains(VfsCapFlags::EFFECTIVE),
+   150	            root_uid,
+   151	        })
+   152	    }
+   153	}
+   154	
+   155	fn parse_revision_and_flags(magic_etc: u32) -> Result<(VfsCapRevision, VfsCapFlags)> {
+   156	    let revision_bits = magic_etc & VFS_CAP_REVISION_MASK;
+   157	    let Ok(revision) = VfsCapRevision::try_from(revision_bits) else {
+   158	        return_errno_with_message!(
+   159	            Errno::EINVAL,
+   160	            "file capabilities use an unsupported xattr revision"
+   161	        );
+   162	    };
+   163	
+   164	    let flags_bits = magic_etc & VFS_CAP_FLAGS_MASK;
+   165	    let Some(flags) = VfsCapFlags::from_bits(flags_bits) else {
+   166	        return_errno_with_message!(
+   167	            Errno::EINVAL,
+   168	            "file capabilities contain unsupported flag bits"
+   169	        );
+   170	    };
+   171	
+   172	    Ok((revision, flags))
+   173	}
+   174	
+   175	fn read_u32_le(bytes: &[u8], word_index: usize) -> Result<u32> {
+   176	    let start = word_index * size_of::<u32>();
+   177	    let end = start + size_of::<u32>();
+   178	    let Some(word_bytes) = bytes.get(start..end) else {
+   179	        return_errno_with_message!(Errno::EINVAL, "file capability xattr is truncated");
+   180	    };
+   181	
+   182	    let mut word = [0u8; size_of::<u32>()];
+   183	    word.copy_from_slice(word_bytes);
+   184	    Ok(u32::from_le_bytes(word))
+   185	}
+
