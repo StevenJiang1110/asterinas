@@ -103,11 +103,20 @@ The ordered concerns are the second axis of the design (personas are parallel; c
 - **Documentation:** general style → path-specific doc currency.
 
 Independently of rule-matching,
-every pass also **hunts for outright bugs by reasoning** about the code,
-reporting them even when no rule names them
+each pass also reasons about code for defects that belong to its persona.
+This is not a general bug sweep repeated by every persona:
+Maintainability looks for structural and process failures,
+Development for runtime correctness,
+Security for adversarial and soundness failures,
+Hardware for ABI and architecture hazards,
+and Documentation for doc style and currency.
+If a suspected defect naturally belongs to another active persona,
+the pass leaves that investigation to that persona.
+Within its owned failure modes,
+a pass reports real defects even when no rule names them
 — each grounded in a short plain-language description of the defect ("Off by one", "Data race", …), not the bare word `bug` —
 and applies an **adversarial self-check**:
-before dismissing a suspected defect as safe,
+before dismissing a suspected in-scope defect as safe,
 it states the concrete input or interleaving that would trigger it.
 "It looks fine" is not a verdict.
 
