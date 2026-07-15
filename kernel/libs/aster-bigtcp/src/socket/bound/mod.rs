@@ -13,6 +13,14 @@ pub(crate) use tcp_listen::TcpListenerBg;
 pub use udp::UdpSocket;
 pub(crate) use udp::UdpSocketBg;
 
+/// Describes whether received data should be copied or truncated.
+pub enum CopyOrTrunc<CopyErr, CopyFn: for<'a> FnMut(&'a [u8]) -> Result<usize, (CopyErr, usize)>> {
+    // Copy means the data will be copied to user buffer.
+    Copy(CopyFn),
+    // Trunc means the data will not be copied to user buffer. The size is the user-provided buffer size.
+    Trunc(usize),
+}
+
 /// Describes how receive operations consume queued data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReceiveBehavior {
@@ -25,6 +33,6 @@ pub enum ReceiveBehavior {
 impl ReceiveBehavior {
     /// Returns whether received data should be removed from the receive buffer.
     pub fn will_consume_data(self) -> bool {
-        self == Self::Recv
+        self != Self::Peek
     }
 }

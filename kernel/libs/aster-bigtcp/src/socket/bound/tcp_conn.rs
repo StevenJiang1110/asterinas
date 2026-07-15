@@ -18,7 +18,7 @@ use smoltcp::{
 };
 
 use super::{
-    ReceiveBehavior,
+    CopyOrTrunc, ReceiveBehavior,
     common::{Inner, NeedIfacePoll, Socket, SocketBg},
     tcp_listen::TcpListenerBg,
 };
@@ -449,7 +449,7 @@ impl<E: Ext> TcpConnection<E> {
     pub fn recv<CopyFn, CopyErr>(
         &self,
         behavior: ReceiveBehavior,
-        mut copy_fn: CopyFn,
+        mut copy_or_trunc: CopyOrTrunc<CopyErr, CopyFn>,
     ) -> Result<(NonZeroUsize, NeedIfacePoll), IoError<RecvError, CopyErr>>
     where
         CopyFn: FnMut(&[u8]) -> Result<usize, (CopyErr, usize)>,
@@ -473,7 +473,7 @@ impl<E: Ext> TcpConnection<E> {
             // `socket.recv` exposes the largest contiguous readable range. If the receive ring
             // buffer wraps, one logical stream read may span two such ranges, so continue at most
             // once while holding the same socket lock to avoid an avoidable short read.
-            let mut copy_socket_buffer = |socket_buffer: &[u8]| {
+            let mut copy_socket_buffer = |socket_buffer: &[u8], copy_fn: &mut CopyFn| {
                 socket_buffer_len = socket_buffer.len();
                 match copy_fn(socket_buffer) {
                     Ok(current_recv_bytes) => {
@@ -487,18 +487,35 @@ impl<E: Ext> TcpConnection<E> {
                 }
             };
 
-            let recv_result = match behavior {
-                ReceiveBehavior::Recv => {
-                    socket.recv(|socket_buffer| copy_socket_buffer(socket_buffer))
+            let recv_result = match (&mut copy_or_trunc, behavior) {
+                (CopyOrTrunc::Copy(copy_fn), ReceiveBehavior::Recv) => {
+                    socket.recv(|socket_buffer| copy_socket_buffer(socket_buffer, copy_fn))
                 }
-                ReceiveBehavior::Peek => {
-                    // FIXME: This implementation relies on `socket.peek()`, which only returns the
-                    // first contiguous readable range. We need more powerful smoltcp APIs to peek the
-                    // wrapped receive buffer without extra caching and copying.
+                (CopyOrTrunc::Trunc(max_len), ReceiveBehavior::Recv) => {
+                    if total_recv_bytes >= *max_len {
+                        break total_recv_bytes;
+                    }
+
+                    socket.recv(|socket_buffer| {
+                        socket_buffer_len = socket_buffer.len().min(*max_len - total_recv_bytes);
+                        recv_bytes = socket_buffer_len;
+                        (recv_bytes, Ok(()))
+                    })
+                }
+                // FIXME: The `Peek` branches below rely on `socket.peek()`, which only returns the
+                // first contiguous readable range. We need more powerful smoltcp APIs to peek the
+                // wrapped receive buffer without extra caching and copying.
+                (CopyOrTrunc::Copy(copy_fn), ReceiveBehavior::Peek) => {
                     let recv_queue = socket.recv_queue();
                     socket.peek(recv_queue).map(|socket_buffer| {
-                        let (_, copy_result) = copy_socket_buffer(socket_buffer);
+                        let (_, copy_result) = copy_socket_buffer(socket_buffer, copy_fn);
                         copy_result
+                    })
+                }
+                (CopyOrTrunc::Trunc(max_len), ReceiveBehavior::Peek) => {
+                    socket.peek(*max_len).map(|socket_buffer| {
+                        recv_bytes = socket_buffer.len();
+                        Ok(())
                     })
                 }
             };

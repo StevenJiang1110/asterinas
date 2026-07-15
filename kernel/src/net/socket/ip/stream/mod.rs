@@ -347,7 +347,7 @@ impl StreamSocket {
     fn try_recv(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, SocketAddr)> {
         let state = self.read_updated_state();
 
@@ -355,6 +355,9 @@ impl StreamSocket {
             State::Connected(connected_stream) => connected_stream,
             State::Init(init_stream) => {
                 let result = init_stream.try_recv();
+                if result.is_ok() {
+                    *flags = RecvFlags::empty();
+                }
                 self.pollee.invalidate();
                 return result;
             }
@@ -366,7 +369,7 @@ impl StreamSocket {
             }
         };
 
-        let result = connected_stream.try_recv(writer, flags);
+        let result = connected_stream.try_recv(writer, *flags);
         self.pollee.invalidate();
 
         let (recv_bytes, need_poll) = result?;
@@ -378,6 +381,7 @@ impl StreamSocket {
             iface.poll();
         }
 
+        *flags = RecvFlags::empty();
         Ok((recv_bytes, remote_endpoint.into()))
     }
 
@@ -610,7 +614,7 @@ impl Socket for StreamSocket {
     fn recvmsg(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, MessageHeader)> {
         // TODO: Deal with flags
         if !flags.is_all_supported() {

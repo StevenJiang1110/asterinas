@@ -2,7 +2,7 @@
 
 use aster_bigtcp::{
     errors::tcp::{IoError, RecvError, SendError},
-    socket::{NeedIfacePoll, RawTcpSetOption},
+    socket::{CopyOrTrunc, NeedIfacePoll, RawTcpSetOption},
     wire::IpEndpoint,
 };
 
@@ -74,11 +74,15 @@ impl ConnectedStream {
         writer: &mut dyn MultiWrite,
         flags: RecvFlags,
     ) -> Result<(usize, NeedIfacePoll)> {
-        let result = self
-            .tcp_conn
-            .recv(flags.receive_behavior(), |socket_buffer| {
-                writer.write(&mut VmReader::from(socket_buffer))
-            });
+        let max_len = writer.sum_lens();
+        let is_trunc = flags.contains(RecvFlags::MSG_TRUNC);
+        let behavior = flags.receive_behavior();
+        let copy_or_trunc = if is_trunc {
+            CopyOrTrunc::Trunc(max_len)
+        } else {
+            CopyOrTrunc::Copy(|socket_buffer| writer.write(&mut VmReader::from(socket_buffer)))
+        };
+        let result = self.tcp_conn.recv(behavior, copy_or_trunc);
 
         match result {
             Ok((recv_bytes, need_poll)) => Ok((recv_bytes.get(), need_poll)),
