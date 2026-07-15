@@ -98,7 +98,7 @@ impl datagram_common::Bound for BoundNetlinkRoute {
     fn try_recv(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, NetlinkSocketAddr)> {
         // TODO: Deal with other flags.
         if !flags.is_all_supported() {
@@ -108,13 +108,14 @@ impl datagram_common::Bound for BoundNetlinkRoute {
         let mut receive_queue = self.receive_queue.lock();
 
         receive_queue.dequeue_if(|response, response_len| {
-            let len = response_len.min(writer.sum_lens());
+            let copied_len = response_len.min(writer.sum_lens());
             response.write_to(writer)?;
 
             // TODO: The message can only come from kernel socket currently.
             let remote = NetlinkSocketAddr::new_unspecified();
 
             let should_dequeue = flags.receive_behavior().will_consume_data();
+            let len = flags.handle_packet_result(copied_len, response_len);
             Ok((should_dequeue, (len, remote)))
         })
     }

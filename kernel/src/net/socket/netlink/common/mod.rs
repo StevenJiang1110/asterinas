@@ -101,7 +101,7 @@ where
     pub(super) fn try_recv(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, SocketAddr)> {
         let recv_bytes = self
             .inner
@@ -183,7 +183,7 @@ where
     fn recvmsg(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, MessageHeader)> {
         let (received_len, addr) =
             self.block_on(IoEvents::IN, self.timeouts.recv_timeout(), || {
