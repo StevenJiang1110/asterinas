@@ -242,7 +242,7 @@ impl UnixStreamSocket {
     fn try_recv(
         &self,
         buf: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, Vec<ControlMessage>)> {
         match self.state.read().as_ref() {
             State::Connected(connected) => connected.try_read(buf, self.is_seqpacket(), flags),
@@ -524,7 +524,7 @@ impl Socket for UnixStreamSocket {
     fn recvmsg(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, MessageHeader)> {
         // TODO: Deal with flags
         if !flags.is_all_supported() {

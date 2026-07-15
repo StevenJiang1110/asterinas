@@ -117,13 +117,14 @@ impl Connected {
         &self,
         writer: &mut dyn MultiWrite,
         is_seqpacket: bool,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, Vec<ControlMessage>)> {
         let is_empty = writer.is_empty();
         if is_empty && !is_seqpacket {
             if self.inner.this_end().reader.lock().is_empty() {
                 return_errno_with_message!(Errno::EAGAIN, "the channel is empty");
             }
+            *flags = RecvFlags::empty();
             return Ok((0, Vec::new()));
         }
 
@@ -157,6 +158,7 @@ impl Connected {
             } else {
                 Vec::new()
             };
+            *flags = RecvFlags::empty();
             return Ok((read_len, ctrl_msgs));
         }
 
@@ -271,7 +273,15 @@ impl Connected {
         };
 
         debug_assert!(is_seqpacket || read_tot_len != 0);
-        Ok((read_tot_len, ctrl_msgs))
+        let message_len = read_tot_len + trunc_len;
+        let result_len = if is_seqpacket {
+            flags.handle_packet_result(read_tot_len, message_len)
+        } else {
+            *flags = RecvFlags::empty();
+            read_tot_len
+        };
+
+        Ok((result_len, ctrl_msgs))
     }
 
     pub(super) fn try_write(
