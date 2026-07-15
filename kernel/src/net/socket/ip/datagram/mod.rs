@@ -77,7 +77,7 @@ impl DatagramSocket {
     fn try_recv(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, SocketAddr)> {
         let recv_bytes = self
             .inner
@@ -225,7 +225,7 @@ impl Socket for DatagramSocket {
     fn recvmsg(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, MessageHeader)> {
         // TODO: Deal with flags
         if !flags.is_all_supported() {

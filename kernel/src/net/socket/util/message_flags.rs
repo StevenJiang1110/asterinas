@@ -53,6 +53,25 @@ bitflags! {
 }
 
 impl RecvFlags {
+    /// Handles a successfully received packet and overwrites the flags with output flags.
+    ///
+    /// Only packet-oriented sockets, including `SOCK_SEQPACKET`, should call this method.
+    pub fn handle_packet_result(&mut self, copied_len: usize, message_len: usize) -> usize {
+        let result_len = if self.contains(Self::MSG_TRUNC) {
+            message_len
+        } else {
+            copied_len
+        };
+
+        *self = if copied_len < message_len {
+            Self::MSG_TRUNC
+        } else {
+            Self::empty()
+        };
+
+        result_len
+    }
+
     pub const fn is_all_supported(self) -> bool {
         Self::SUPPORTED.contains(self)
     }

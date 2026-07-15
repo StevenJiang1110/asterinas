@@ -166,13 +166,15 @@ impl VsockStreamSocket {
         connected_stream.try_send(reader, flags)
     }
 
-    fn try_recv(&self, writer: &mut dyn MultiWrite, flags: RecvFlags) -> Result<usize> {
+    fn try_recv(&self, writer: &mut dyn MultiWrite, flags: &mut RecvFlags) -> Result<usize> {
         let mut state = self.lock_updated_state();
         let State::Connected(connected_stream) = state.as_mut() else {
             return_errno_with_message!(Errno::ENOTCONN, "the socket is not connected");
         };
 
-        connected_stream.try_recv(writer, flags)
+        let received_bytes = connected_stream.try_recv(writer, *flags)?;
+        *flags = RecvFlags::empty();
+        Ok(received_bytes)
     }
 
     fn test_and_clear_error(&self) -> Option<Error> {
@@ -407,7 +409,7 @@ impl Socket for VsockStreamSocket {
     fn recvmsg(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, MessageHeader)> {
         // TODO: Deal with flags
         if !flags.is_all_supported() {

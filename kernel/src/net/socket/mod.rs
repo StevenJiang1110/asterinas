@@ -131,11 +131,11 @@ pub trait Socket: private::SocketPrivate + Send + Sync {
     ///
     /// If successful, the `io_vecs` buffer will be filled with the received content.
     /// This method returns the length of the received message,
-    /// and the message header.
+    /// and the message header. The input flags are overwritten with output flags on success.
     fn recvmsg(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, MessageHeader)>;
 
     /// Returns a reference to the pseudo path associated with this socket.
@@ -150,7 +150,8 @@ impl<T: Socket + 'static> FileLike for T {
         }
 
         // TODO: Set correct flags
-        self.recvmsg(writer, RecvFlags::empty()).map(|(len, _)| len)
+        self.recvmsg(writer, &mut RecvFlags::empty())
+            .map(|(len, _)| len)
     }
 
     fn write(&self, reader: &mut VmReader) -> Result<usize> {

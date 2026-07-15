@@ -42,7 +42,7 @@ pub trait Bound {
     fn try_recv(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, Self::Endpoint)>;
     fn try_send(
         &self,
@@ -136,7 +136,7 @@ where
     pub fn try_recv(
         &self,
         writer: &mut dyn MultiWrite,
-        flags: RecvFlags,
+        flags: &mut RecvFlags,
     ) -> Result<(usize, UnboundSocket::Endpoint)> {
         match self {
             Inner::Unbound(_) => {

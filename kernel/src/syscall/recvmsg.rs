@@ -18,7 +18,7 @@ pub fn sys_recvmsg(
 ) -> Result<SyscallReturn> {
     let user_space = ctx.user_space();
     let mut c_user_msghdr: CUserMsgHdr = user_space.read_val(user_msghdr_ptr)?;
-    let flags = RecvFlags::from_bits_truncate(flags);
+    let mut flags = RecvFlags::from_bits_truncate(flags);
 
     debug!(
         "sockfd = {}, user_msghdr = {:x?}, flags = {:?}",
@@ -32,7 +32,7 @@ pub fn sys_recvmsg(
     let (total_bytes, message_header) = {
         let mut io_vec_writer = c_user_msghdr.copy_writer_array_from_user(&user_space)?;
         socket
-            .recvmsg(&mut io_vec_writer, flags)
+            .recvmsg(&mut io_vec_writer, &mut flags)
             .map_err(|err| match err.error() {
                 // FIXME: `recvmsg` should not be restarted if a timeout has been set on the socket using `setsockopt`.
                 Errno::EINTR => Error::new(Errno::ERESTARTSYS),
@@ -50,6 +50,7 @@ pub fn sys_recvmsg(
     let control_messages = message_header.control_messages();
     c_user_msghdr.msg_controllen =
         c_user_msghdr.write_control_messages_to_user(control_messages, &user_space)? as _;
+    c_user_msghdr.msg_flags = flags.bits() as u32;
 
     user_space.write_val(user_msghdr_ptr, &c_user_msghdr)?;
 
