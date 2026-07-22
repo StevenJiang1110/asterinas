@@ -28,7 +28,7 @@ use crate::{
     },
     prelude::*,
     process::signal::{PollHandle, Pollable, Pollee},
-    util::{MultiRead, MultiWrite, net::SockType},
+    util::{MultiRead, MultiWrite, ioctl::RawIoctl, net::SockType},
 };
 
 mod bound;
@@ -122,6 +122,13 @@ impl<P: SupportedNetlinkProtocol> Socket for NetlinkSocket<P>
 where
     BoundNetlink<P::Message>: Bound<Endpoint = NetlinkSocketAddr>,
 {
+    fn ioctl(&self, raw_ioctl: RawIoctl) -> Result<i32> {
+        if !P::SUPPORTS_NETWORK_DEVICE_IOCTL {
+            return_errno_with_message!(Errno::ENOTTY, "the socket ioctl command is unknown");
+        }
+        crate::net::socket::ioctl::network_device_ioctl(raw_ioctl)
+    }
+
     fn bind(&self, socket_addr: SocketAddr) -> Result<()> {
         let endpoint = socket_addr.try_into()?;
 

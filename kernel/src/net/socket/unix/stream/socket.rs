@@ -35,7 +35,7 @@ use crate::{
         Gid,
         signal::{PollHandle, Pollable, Pollee},
     },
-    util::{MultiRead, MultiWrite, net::SockType},
+    util::{MultiRead, MultiWrite, ioctl::RawIoctl, net::SockType},
 };
 
 pub struct UnixStreamSocket {
@@ -333,6 +333,10 @@ impl SocketPrivate for UnixStreamSocket {
 }
 
 impl Socket for UnixStreamSocket {
+    fn ioctl(&self, raw_ioctl: RawIoctl) -> Result<i32> {
+        crate::net::socket::ioctl::network_device_ioctl(raw_ioctl)
+    }
+
     fn bind(&self, socket_addr: SocketAddr) -> Result<()> {
         let addr = UnixSocketAddr::try_from(socket_addr)?;
 

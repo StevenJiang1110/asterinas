@@ -47,7 +47,7 @@ use crate::{
     },
     prelude::*,
     process::signal::{PollHandle, Pollable, Pollee},
-    util::{MultiRead, MultiWrite, net::SockType},
+    util::{MultiRead, MultiWrite, ioctl::RawIoctl, net::SockType},
 };
 
 mod connected;
@@ -467,6 +467,10 @@ impl SocketPrivate for StreamSocket {
 }
 
 impl Socket for StreamSocket {
+    fn ioctl(&self, raw_ioctl: RawIoctl) -> Result<i32> {
+        crate::net::socket::ioctl::network_device_ioctl(raw_ioctl)
+    }
+
     fn bind(&self, socket_addr: SocketAddr) -> Result<()> {
         let endpoint = socket_addr.try_into()?;
 
