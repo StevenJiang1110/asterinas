@@ -14,9 +14,10 @@ use crate::{
         pseudofs::SockFs,
     },
     prelude::*,
-    util::{MultiRead, MultiWrite},
+    util::{MultiRead, MultiWrite, ioctl::RawIoctl},
 };
 
+mod ioctl;
 pub mod ip;
 pub mod netlink;
 pub mod options;
@@ -118,6 +119,11 @@ pub trait Socket: private::SocketPrivate + Send + Sync {
         return_errno_with_message!(Errno::EOPNOTSUPP, "setsockopt() is not supported");
     }
 
+    /// Handles an ioctl command on this socket.
+    fn ioctl(&self, _raw_ioctl: RawIoctl) -> Result<i32> {
+        return_errno_with_message!(Errno::ENOTTY, "the socket ioctl command is unknown")
+    }
+
     /// Sends a message on the socket.
     fn sendmsg(
         &self,
@@ -163,6 +169,10 @@ impl<T: Socket + 'static> FileLike for T {
 
     fn settable_status_flags(&self) -> SettableStatusFlags {
         SettableStatusFlags::minimal().with_o_async()
+    }
+
+    fn ioctl(&self, raw_ioctl: RawIoctl) -> Result<i32> {
+        Socket::ioctl(self, raw_ioctl)
     }
 
     fn access_mode(&self) -> AccessMode {

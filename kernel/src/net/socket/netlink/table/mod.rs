@@ -39,6 +39,8 @@ impl NetlinkSocketTable {
 pub trait SupportedNetlinkProtocol {
     type Message: 'static + Send;
 
+    const SUPPORTS_NETWORK_DEVICE_IOCTL: bool;
+
     fn socket_table() -> &'static RwMutex<ProtocolSocketTable<Self::Message>>;
 
     fn bind(
@@ -72,6 +74,8 @@ pub enum NetlinkRouteProtocol {}
 impl SupportedNetlinkProtocol for NetlinkRouteProtocol {
     type Message = RtnlMessage;
 
+    const SUPPORTS_NETWORK_DEVICE_IOCTL: bool = true;
+
     fn socket_table() -> &'static RwMutex<ProtocolSocketTable<Self::Message>> {
         &NETLINK_SOCKET_TABLE.get().unwrap().route
     }
@@ -81,6 +85,8 @@ pub enum NetlinkUeventProtocol {}
 
 impl SupportedNetlinkProtocol for NetlinkUeventProtocol {
     type Message = UeventMessage;
+
+    const SUPPORTS_NETWORK_DEVICE_IOCTL: bool = false;
 
     fn socket_table() -> &'static RwMutex<ProtocolSocketTable<Self::Message>> {
         &NETLINK_SOCKET_TABLE.get().unwrap().uevent

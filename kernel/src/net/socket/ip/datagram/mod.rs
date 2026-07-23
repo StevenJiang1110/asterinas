@@ -29,7 +29,7 @@ use crate::{
     },
     prelude::*,
     process::signal::{PollHandle, Pollable, Pollee},
-    util::{MultiRead, MultiWrite, net::SockType},
+    util::{MultiRead, MultiWrite, ioctl::RawIoctl, net::SockType},
 };
 
 mod bound;
@@ -141,6 +141,10 @@ impl SocketPrivate for DatagramSocket {
 }
 
 impl Socket for DatagramSocket {
+    fn ioctl(&self, raw_ioctl: RawIoctl) -> Result<i32> {
+        crate::net::socket::ioctl::network_device_ioctl(raw_ioctl)
+    }
+
     fn bind(&self, socket_addr: SocketAddr) -> Result<()> {
         let endpoint = socket_addr.try_into()?;
         let can_reuse = self.options.read().socket.reuse_addr();

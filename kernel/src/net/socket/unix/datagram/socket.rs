@@ -28,7 +28,7 @@ use crate::{
     },
     prelude::*,
     process::signal::{PollHandle, Pollable},
-    util::{MultiRead, MultiWrite, net::SockType},
+    util::{MultiRead, MultiWrite, ioctl::RawIoctl, net::SockType},
 };
 
 pub struct UnixDatagramSocket {
@@ -173,6 +173,10 @@ impl SocketPrivate for UnixDatagramSocket {
 }
 
 impl Socket for UnixDatagramSocket {
+    fn ioctl(&self, raw_ioctl: RawIoctl) -> Result<i32> {
+        crate::net::socket::ioctl::network_device_ioctl(raw_ioctl)
+    }
+
     fn bind(&self, socket_addr: SocketAddr) -> Result<()> {
         let addr = UnixSocketAddr::try_from(socket_addr)?;
         self.local_receiver.bind(addr)
