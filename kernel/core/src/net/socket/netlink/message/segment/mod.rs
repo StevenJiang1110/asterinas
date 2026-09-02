@@ -18,10 +18,14 @@ pub(crate) trait SegmentBody: Sized + Clone + Copy {
     // but older versions of Linux use a legacy type (usually `CRtGenMsg` here).
     // Additionally, some software, like iproute2, also uses this legacy type.
     // Therefore, we need to handle both cases.
-    // Reference: <https://elixir.bootlin.com/linux/v6.13/source/net/core/rtnetlink.c#L2393>.
+    // Reference: <https://elixir.bootlin.com/linux/v7.1/source/net/core/rtnetlink.c#L2454>.
     // FIXME: Verify whether the legacy type includes any types other than `CRtGenMsg`.
     type CLegacyType: Pod = Self::CType;
     type CType: Pod + From<Self::CLegacyType> + TryInto<Self> + From<Self>;
+
+    fn validate_c_type(_value: &Self::CType, _strict_check: bool) -> Result<()> {
+        Ok(())
+    }
 
     /// Reads the segment body from the `reader`.
     ///
@@ -29,6 +33,7 @@ pub(crate) trait SegmentBody: Sized + Clone + Copy {
     fn read_from(
         header: &CMsgSegHdr,
         reader: &mut dyn MultiRead,
+        strict_check: bool,
     ) -> Result<ContinueRead<(Self, usize)>>
     where
         Error: From<<Self::CType as TryInto<Self>>::Error>,
@@ -36,6 +41,17 @@ pub(crate) trait SegmentBody: Sized + Clone + Copy {
         let mut remaining_len = header.calc_payload_len_with_padding(reader)?;
 
         // Read the body.
+        // Linux's strict rtnetlink validators require the current message body type. The
+        // legacy `rtgenmsg` body is accepted only for non-strict compatibility with old iproute2.
+        // Reference: <https://elixir.bootlin.com/linux/v7.1/source/net/core/rtnetlink.c#L2430>.
+        if strict_check && remaining_len < size_of::<Self::CType>() {
+            reader.skip_some(remaining_len);
+            return Ok(ContinueRead::skipped_with_error(
+                Errno::EINVAL,
+                "the message body is too short",
+            ));
+        }
+
         let (c_type, padding_len) = if remaining_len >= size_of::<Self::CType>() {
             let c_type = reader.read_val_opt::<Self::CType>()?.unwrap();
             remaining_len -= size_of_val(&c_type);
@@ -59,6 +75,10 @@ pub(crate) trait SegmentBody: Sized + Clone + Copy {
         reader.skip_some(padding_len);
         remaining_len -= padding_len;
 
+        if let Err(err) = Self::validate_c_type(&c_type, strict_check) {
+            reader.skip_some(remaining_len);
+            return Ok(ContinueRead::SkippedErr(err));
+        }
         match c_type.try_into() {
             Ok(body) => Ok(ContinueRead::Parsed((body, remaining_len))),
             Err(err) => {

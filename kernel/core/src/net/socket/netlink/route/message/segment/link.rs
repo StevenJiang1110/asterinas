@@ -21,6 +21,15 @@ pub(in netlink) type LinkSegment = SegmentCommon<LinkSegmentBody, LinkAttr>;
 impl SegmentBody for LinkSegmentBody {
     type CLegacyType = CRtGenMsg;
     type CType = CIfinfoMsg;
+
+    fn validate_c_type(value: &Self::CType, strict_check: bool) -> Result<()> {
+        if strict_check
+            && (value._pad != 0 || value.type_ != 0 || value.flags != 0 || value.change != 0)
+        {
+            return_errno_with_message!(Errno::EINVAL, "the link request header is not valid");
+        }
+        Ok(())
+    }
 }
 
 /// `ifinfomsg` in Linux.
@@ -55,8 +64,9 @@ impl TryFrom<CIfinfoMsg> for LinkSegmentBody {
     type Error = Error;
 
     fn try_from(value: CIfinfoMsg) -> Result<Self> {
-        let family = CSocketAddrFamily::try_from(value.family as i32)?;
-        let type_ = InterfaceType::try_from(value.type_)?;
+        let family = CSocketAddrFamily::try_from(value.family as i32)
+            .unwrap_or(CSocketAddrFamily::AF_UNSPEC);
+        let type_ = InterfaceType::try_from(value.type_).unwrap_or(InterfaceType::NETROM);
         let index = NonZeroU32::new(value.index);
         let flags = InterfaceFlags::from_bits_truncate(value.flags);
 

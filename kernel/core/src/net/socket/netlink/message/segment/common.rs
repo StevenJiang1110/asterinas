@@ -2,21 +2,28 @@
 
 #![short_vis_path::add(netlink)]
 
-use super::{SegmentBody, header::CMsgSegHdr};
+use super::{
+    SegmentBody,
+    header::{CMsgSegHdr, GetRequestFlags},
+};
 use crate::{
-    net::socket::netlink::message::{ContinueRead, attr::Attribute},
+    net::socket::netlink::message::{
+        ContinueRead,
+        attr::{Attribute, ParsedAttrs},
+    },
     prelude::*,
     util::{MultiRead, MultiWrite},
 };
 
 #[derive(Debug)]
-pub(crate) struct SegmentCommon<Body, Attr> {
+pub(crate) struct SegmentCommon<Body, Attr: Attribute> {
     header: CMsgSegHdr,
     body: Body,
     attrs: Vec<Attr>,
+    seen_types: Vec<Attr::Type>,
 }
 
-impl<Body, Attr> SegmentCommon<Body, Attr> {
+impl<Body, Attr: Attribute> SegmentCommon<Body, Attr> {
     pub(in netlink) const HEADER_LEN: usize = size_of::<CMsgSegHdr>();
 
     pub(in netlink) fn header(&self) -> &CMsgSegHdr {
@@ -31,8 +38,12 @@ impl<Body, Attr> SegmentCommon<Body, Attr> {
         &self.body
     }
 
-    pub(in netlink) fn attrs(&self) -> &Vec<Attr> {
+    pub(in netlink) fn attrs(&self) -> &[Attr] {
         &self.attrs
+    }
+
+    pub(in netlink) fn seen_types(&self) -> &[Attr::Type] {
+        &self.seen_types
     }
 }
 
@@ -44,6 +55,7 @@ impl<Body: SegmentBody, Attr: Attribute> SegmentCommon<Body, Attr> {
             header,
             body,
             attrs,
+            seen_types: Vec::new(),
         };
         res.header.len = res.total_len() as u32;
         res
@@ -52,26 +64,31 @@ impl<Body: SegmentBody, Attr: Attribute> SegmentCommon<Body, Attr> {
     pub(in netlink) fn read_from(
         header: &CMsgSegHdr,
         reader: &mut dyn MultiRead,
+        strict_check: bool,
     ) -> Result<ContinueRead<Self>>
     where
         Error: From<<Body::CType as TryInto<Body>>::Error>,
     {
-        let (body, remain_len) = match Body::read_from(header, reader)? {
+        let (body, remain_len) = match Body::read_from(header, reader, strict_check)? {
             ContinueRead::Parsed(parsed) => parsed,
             ContinueRead::Skipped => return Ok(ContinueRead::Skipped),
             ContinueRead::SkippedErr(err) => return Ok(ContinueRead::SkippedErr(err)),
         };
 
-        let attrs = match Attr::read_all_from(reader, remain_len)? {
+        let dump_all =
+            GetRequestFlags::from_bits_truncate(header.flags).contains(GetRequestFlags::DUMP);
+        let parsed_attrs = match Attr::read_all_from(reader, remain_len, strict_check, dump_all)? {
             ContinueRead::Parsed(attrs) => attrs,
-            ContinueRead::Skipped => Vec::new(),
+            ContinueRead::Skipped => ParsedAttrs::new(Vec::new(), Vec::new()),
             ContinueRead::SkippedErr(err) => return Ok(ContinueRead::SkippedErr(err)),
         };
+        let (attrs, seen_types) = parsed_attrs.into_parts();
 
         Ok(ContinueRead::Parsed(Self {
             header: *header,
             body,
             attrs,
+            seen_types,
         }))
     }
 

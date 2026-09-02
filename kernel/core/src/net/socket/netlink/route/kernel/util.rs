@@ -12,6 +12,7 @@ use crate::{
 pub(super) fn finish_response(
     request_header: &CMsgSegHdr,
     dump_all: bool,
+    dump_filtered: bool,
     response_segments: &mut Vec<RtnlSegment>,
 ) {
     if !dump_all {
@@ -20,6 +21,12 @@ pub(super) fn finish_response(
     }
     append_done_segment(request_header, response_segments);
     add_multi_flag(response_segments);
+    if dump_filtered {
+        for segment in response_segments.iter_mut() {
+            let header = segment.header_mut();
+            header.flags |= SegHdrCommonFlags::DUMP_FILTERED.bits();
+        }
+    }
 }
 
 /// Appends a done segment as the last segment of the provided segments.
