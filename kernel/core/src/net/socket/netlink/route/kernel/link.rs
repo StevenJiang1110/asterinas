@@ -4,7 +4,7 @@
 
 use core::num::NonZero;
 
-use aster_bigtcp::{iface::InterfaceType, wire::EthernetAddress};
+use aster_bigtcp::wire::EthernetAddress;
 
 use super::util::finish_response;
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         iface::{DEFAULT_TX_QUEUE_LEN, Iface, iter_all_ifaces},
         socket::netlink::{
             message::{CMsgSegHdr, CSegmentType, GetRequestFlags, SegHdrCommonFlags},
-            route::message::{LinkAttr, LinkSegment, LinkSegmentBody, RtnlSegment},
+            route::message::{LinkAttr, LinkAttrClass, LinkSegment, LinkSegmentBody, RtnlSegment},
         },
     },
     prelude::*,
@@ -22,8 +22,11 @@ use crate::{
 /// The unspecified link-layer address.
 const UNSPECIFIED_LINK_ADDR: EthernetAddress = EthernetAddress([0; 6]);
 
-pub(super) fn do_get_link(request_segment: &LinkSegment) -> Result<Vec<RtnlSegment>> {
-    let filter_by = FilterBy::from_request(request_segment)?;
+pub(super) fn do_get_link(
+    request_segment: &LinkSegment,
+    strict_check: bool,
+) -> Result<Vec<RtnlSegment>> {
+    let filter_by = FilterBy::from_request(request_segment, strict_check)?;
 
     let mut response_segments: Vec<RtnlSegment> = iter_all_ifaces()
         // Filter to include only requested links.
@@ -37,12 +40,16 @@ pub(super) fn do_get_link(request_segment: &LinkSegment) -> Result<Vec<RtnlSegme
         .collect();
 
     let dump_all = matches!(filter_by, FilterBy::Dump);
-
     if !dump_all && response_segments.is_empty() {
         return_errno_with_message!(Errno::ENODEV, "no link found");
     }
 
-    finish_response(request_segment.header(), dump_all, &mut response_segments);
+    finish_response(
+        request_segment.header(),
+        dump_all,
+        false,
+        &mut response_segments,
+    );
 
     Ok(response_segments)
 }
@@ -54,17 +61,21 @@ enum FilterBy<'a> {
 }
 
 impl<'a> FilterBy<'a> {
-    fn from_request(request_segment: &'a LinkSegment) -> Result<Self> {
+    fn from_request(request_segment: &'a LinkSegment, strict_check: bool) -> Result<Self> {
         let dump_all = {
             let flags = GetRequestFlags::from_bits_truncate(request_segment.header().flags);
             flags.contains(GetRequestFlags::DUMP)
         };
+        validate_getlink_request(request_segment, strict_check, dump_all)?;
         if dump_all {
-            validate_dumplink_request(request_segment.body())?;
+            if strict_check && request_segment.body().index.is_some() {
+                return_errno_with_message!(
+                    Errno::EINVAL,
+                    "filtering by interface index is not valid for link dumps"
+                );
+            }
             return Ok(Self::Dump);
         }
-
-        validate_getlink_request(request_segment.body())?;
 
         // `index` takes precedence over `required_name`.
 
@@ -72,7 +83,7 @@ impl<'a> FilterBy<'a> {
             return Ok(Self::Index(required_index.get()));
         }
 
-        let required_name = request_segment.attrs().iter().find_map(|attr| {
+        let required_name = request_segment.attrs().iter().rev().find_map(|attr| {
             if let LinkAttr::Name(name) = attr {
                 Some(name.as_cstr())
             } else {
@@ -93,33 +104,38 @@ impl<'a> FilterBy<'a> {
 // The below functions starting with `validate_` should only be enabled in strict mode.
 // Reference: <https://docs.kernel.org/userspace-api/netlink/intro.html#strict-checking>.
 
-fn validate_getlink_request(body: &LinkSegmentBody) -> Result<()> {
-    // FIXME: The Linux implementation also checks the `padding` and `change` fields,
-    // but these fields are lost during the conversion of a `CIfInfoMsg` to `LinkSegmentBody`.
-    // We should consider including the `change` field in `LinkSegmentBody`.
-    // Reference: <https://elixir.bootlin.com/linux/v6.13/source/net/core/rtnetlink.c#L4043>.
-    if !body.flags.is_empty() || body.type_ != InterfaceType::NETROM {
-        return_errno_with_message!(Errno::EINVAL, "the flags or the type is not valid");
+fn validate_getlink_request(
+    request_segment: &LinkSegment,
+    strict_check: bool,
+    dump: bool,
+) -> Result<()> {
+    if !strict_check {
+        return Ok(());
     }
-
-    Ok(())
-}
-
-fn validate_dumplink_request(body: &LinkSegmentBody) -> Result<()> {
-    // FIXME: The Linux implementation also checks the `padding` and `change` fields.
-    // Reference: <https://elixir.bootlin.com/linux/v6.13/source/net/core/rtnetlink.c#L2378>.
-    if !body.flags.is_empty() || body.type_ != InterfaceType::NETROM {
-        return_errno_with_message!(Errno::EINVAL, "the flags or the type is not valid");
+    // These are the attributes accepted by Linux's strict RTM_GETLINK validators.
+    // Reference: <https://elixir.bootlin.com/linux/v7.1/source/net/core/rtnetlink.c#L4152>.
+    let allowed = if dump {
+        [
+            LinkAttrClass::MASTER,
+            LinkAttrClass::LINKINFO,
+            LinkAttrClass::EXT_MASK,
+            LinkAttrClass::IF_NETNSID,
+        ]
+        .as_slice()
+    } else {
+        [
+            LinkAttrClass::IFNAME,
+            LinkAttrClass::ALT_IFNAME,
+            LinkAttrClass::EXT_MASK,
+            LinkAttrClass::IF_NETNSID,
+        ]
+        .as_slice()
+    };
+    for type_ in request_segment.seen_types() {
+        if !allowed.contains(type_) {
+            return_errno_with_message!(Errno::EINVAL, "the link attribute is not allowed");
+        }
     }
-
-    // The check is from <https://elixir.bootlin.com/linux/v6.13/source/net/core/rtnetlink.c#L2383>.
-    if body.index.is_some() {
-        return_errno_with_message!(
-            Errno::EINVAL,
-            "filtering by interface index is not valid for link dumps"
-        );
-    }
-
     Ok(())
 }
 
