@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use super::{Attribute, CAttrHeader};
+use super::{Attribute, CAttrHeader, ParsedAttrs};
 use crate::{net::socket::netlink::message::ContinueRead, prelude::*, util::MultiRead};
 
 /// A special type indicates that a segment cannot have attributes.
@@ -8,6 +8,12 @@ use crate::{net::socket::netlink::message::ContinueRead, prelude::*, util::Multi
 pub(crate) enum NoAttr {}
 
 impl Attribute for NoAttr {
+    type Type = ();
+
+    fn type_from_raw(_type_: u16) -> Option<Self::Type> {
+        None
+    }
+
     fn type_(&self) -> u16 {
         match *self {}
     }
@@ -29,12 +35,17 @@ impl Attribute for NoAttr {
     fn read_all_from(
         reader: &mut dyn MultiRead,
         total_len: usize,
-    ) -> Result<ContinueRead<Vec<Self>>>
+        _strict_check: bool,
+        _dump_all: bool,
+    ) -> Result<ContinueRead<ParsedAttrs<Self>>>
     where
         Self: Sized,
     {
         reader.skip_some(total_len);
 
-        Ok(ContinueRead::Skipped)
+        Ok(ContinueRead::Parsed(ParsedAttrs {
+            attrs: Vec::new(),
+            seen_types: Vec::new(),
+        }))
     }
 }

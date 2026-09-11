@@ -49,6 +49,7 @@ pub(crate) trait Bound {
         reader: &mut dyn MultiRead,
         remote: &Self::Endpoint,
         flags: SendFlags,
+        strict_check: bool,
     ) -> Result<usize>;
 
     fn check_io_events(&self) -> IoEvents;
