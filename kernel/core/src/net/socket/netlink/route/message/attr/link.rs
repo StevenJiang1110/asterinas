@@ -15,7 +15,7 @@ use crate::{
 #[expect(clippy::upper_case_acronyms)]
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, TryFromInt)]
-enum LinkAttrClass {
+pub(crate) enum LinkAttrClass {
     UNSPEC = 0,
     ADDRESS = 1,
     BROADCAST = 2,
@@ -112,6 +112,8 @@ impl LinkAttr {
 }
 
 impl Attribute for LinkAttr {
+    type Type = LinkAttrClass;
+
     fn type_(&self) -> u16 {
         self.class() as u16
     }
@@ -143,7 +145,10 @@ impl Attribute for LinkAttr {
         };
 
         let res = match (class, payload_len) {
-            (LinkAttrClass::IFNAME, 1..=InterfaceName::MAX_BYTES_WITH_NUL) => {
+            (
+                LinkAttrClass::IFNAME | LinkAttrClass::ALT_IFNAME,
+                1..=InterfaceName::MAX_BYTES_WITH_NUL,
+            ) => {
                 let mut name_bytes = [0u8; InterfaceName::MAX_BYTES_WITH_NUL];
 
                 let mut writer = VmWriter::from(&mut name_bytes[..payload_len]);
@@ -169,6 +174,7 @@ impl Attribute for LinkAttr {
 
             (
                 LinkAttrClass::IFNAME
+                | LinkAttrClass::ALT_IFNAME
                 | LinkAttrClass::MTU
                 | LinkAttrClass::TXQLEN
                 | LinkAttrClass::LINKMODE
@@ -195,6 +201,10 @@ impl Attribute for LinkAttr {
         };
 
         Ok(ContinueRead::Parsed(res))
+    }
+
+    fn type_from_raw(type_: u16) -> Option<Self::Type> {
+        LinkAttrClass::try_from(type_).ok()
     }
 }
 
