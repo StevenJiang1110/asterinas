@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+#![short_vis_path::add(netlink)]
+
 use core::num::NonZeroU32;
 
 use super::legacy::CRtGenMsg;
@@ -11,11 +13,18 @@ use crate::{
     prelude::*,
 };
 
-pub(crate) type AddrSegment = SegmentCommon<AddrSegmentBody, AddrAttr>;
+pub(in netlink) type AddrSegment = SegmentCommon<AddrSegmentBody, AddrAttr>;
 
 impl SegmentBody for AddrSegmentBody {
     type CLegacyType = CRtGenMsg;
     type CType = CIfaddrMsg;
+
+    fn validate_c_type(value: &Self::CType, strict_check: bool) -> Result<()> {
+        if strict_check && (value.prefix_len != 0 || value.flags != 0 || value.scope != 0) {
+            return_errno_with_message!(Errno::EINVAL, "the address request header is not valid");
+        }
+        Ok(())
+    }
 }
 
 /// `ifaddrmsg` in Linux.
@@ -50,7 +59,7 @@ impl TryFrom<CIfaddrMsg> for AddrSegmentBody {
     fn try_from(value: CIfaddrMsg) -> Result<Self> {
         // TODO: If the attribute IFA_FLAGS exists, the flags in header should be ignored.
         let flags = AddrMessageFlags::from_bits_truncate(value.flags as u32);
-        let scope = RtScope::try_from(value.scope)?;
+        let scope = RtScope::try_from(value.scope).unwrap_or(RtScope::UNIVERSE);
         let index = NonZeroU32::new(value.index);
 
         Ok(Self {

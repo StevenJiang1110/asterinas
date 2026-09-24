@@ -24,6 +24,8 @@
 //!
 //! [`segment`]: super::segment
 
+#![short_vis_path::add(netlink)]
+
 use align_ext::AlignExt;
 
 use super::{ContinueRead, NLMSG_ALIGN};
@@ -32,7 +34,7 @@ use crate::{
     util::{MultiRead, MultiWrite},
 };
 
-pub(crate) mod noattr;
+pub(super) mod noattr;
 
 /// Netlink attribute header.
 ///
@@ -63,27 +65,27 @@ impl CAttrHeader {
     }
 
     /// Returns the type of the attribute.
-    pub(crate) fn type_(&self) -> u16 {
+    pub(in netlink) fn type_(&self) -> u16 {
         self.type_ & ATTRIBUTE_TYPE_MASK
     }
 
     /// Returns the payload length (excluding padding).
-    pub(crate) fn payload_len(&self) -> usize {
+    pub(in netlink) fn payload_len(&self) -> usize {
         self.len as usize - size_of::<Self>()
     }
 
     /// Returns the total length of the attribute (header + payload, excluding padding).
-    pub(crate) fn total_len(&self) -> usize {
+    pub(in netlink) fn total_len(&self) -> usize {
         self.len as usize
     }
 
     /// Returns the total length of the attribute (header + payload, including padding).
-    pub(crate) fn total_len_with_padding(&self) -> usize {
+    pub(in netlink) fn total_len_with_padding(&self) -> usize {
         (self.len as usize).align_up(NLMSG_ALIGN)
     }
 
     /// Returns the length of the padding bytes.
-    pub(crate) fn padding_len(&self) -> usize {
+    pub(in netlink) fn padding_len(&self) -> usize {
         self.total_len_with_padding() - self.total_len()
     }
 }
@@ -94,6 +96,8 @@ const ATTRIBUTE_TYPE_MASK: u16 = !(IS_NESTED_MASK | IS_NET_BYTEORDER_MASK);
 
 /// Netlink Attribute.
 pub(crate) trait Attribute: Debug + Send + Sync {
+    type Type: Copy + Eq + Debug;
+
     /// Returns the type of the attribute.
     fn type_(&self) -> u16;
 
@@ -124,11 +128,14 @@ pub(crate) trait Attribute: Debug + Send + Sync {
     fn read_all_from(
         reader: &mut dyn MultiRead,
         mut total_len: usize,
-    ) -> Result<ContinueRead<Vec<Self>>>
+        strict_check: bool,
+        dump_all: bool,
+    ) -> Result<ContinueRead<ParsedAttrs<Self>>>
     where
         Self: Sized,
     {
         let mut res = Vec::new();
+        let mut seen_types = Vec::new();
 
         // Below, we're performing strict validation. Although Linux tends to perform strict
         // validation for new netlink message consumers, it may allow fewer or no validations for
@@ -140,6 +147,9 @@ pub(crate) trait Attribute: Debug + Send + Sync {
             // Validate the remaining length for the attribute header length.
             if total_len < size_of::<CAttrHeader>() {
                 reader.skip_some(total_len);
+                if !strict_check {
+                    return Ok(ContinueRead::Parsed(ParsedAttrs::new(res, seen_types)));
+                }
                 return Ok(ContinueRead::skipped_with_error(
                     Errno::EINVAL,
                     "the reader length is too small",
@@ -148,9 +158,16 @@ pub(crate) trait Attribute: Debug + Send + Sync {
 
             // Read and validate the attribute header.
             let header = reader.read_val_opt::<CAttrHeader>()?.unwrap();
+            let type_ = Self::type_from_raw(header.type_());
+            if let Some(type_) = type_ {
+                seen_types.push(type_);
+            }
             total_len -= size_of::<CAttrHeader>();
             if header.total_len() < size_of::<CAttrHeader>() {
                 reader.skip_some(total_len);
+                if !strict_check {
+                    return Ok(ContinueRead::Parsed(ParsedAttrs::new(res, seen_types)));
+                }
                 return Ok(ContinueRead::skipped_with_error(
                     Errno::EINVAL,
                     "the attribute length is too small",
@@ -160,6 +177,9 @@ pub(crate) trait Attribute: Debug + Send + Sync {
             // Validate the remaining length for the attribute payload length.
             if header.payload_len() > total_len {
                 reader.skip_some(total_len);
+                if !strict_check {
+                    return Ok(ContinueRead::Parsed(ParsedAttrs::new(res, seen_types)));
+                }
                 return Ok(ContinueRead::skipped_with_error(
                     Errno::EINVAL,
                     "the reader size is too small",
@@ -170,9 +190,20 @@ pub(crate) trait Attribute: Debug + Send + Sync {
             // Read the attribute.
             match Self::read_from(&header, reader)? {
                 ContinueRead::Parsed(attr) => res.push(attr),
-                ContinueRead::Skipped => (),
+                ContinueRead::Skipped => {
+                    if strict_check {
+                        reader.skip_some(total_len);
+                        return Ok(ContinueRead::skipped_with_error(
+                            Errno::EINVAL,
+                            "the attribute is not supported",
+                        ));
+                    }
+                }
                 ContinueRead::SkippedErr(err) => {
                     reader.skip_some(total_len);
+                    if dump_all && !strict_check {
+                        return Ok(ContinueRead::Parsed(ParsedAttrs::new(res, seen_types)));
+                    }
                     return Ok(ContinueRead::SkippedErr(err));
                 }
             }
@@ -183,8 +214,10 @@ pub(crate) trait Attribute: Debug + Send + Sync {
             total_len -= padding_len;
         }
 
-        Ok(ContinueRead::Parsed(res))
+        Ok(ContinueRead::Parsed(ParsedAttrs::new(res, seen_types)))
     }
+
+    fn type_from_raw(type_: u16) -> Option<Self::Type>;
 
     /// Writes the attribute to the `writer`.
     fn write_to(&self, writer: &mut dyn MultiWrite) -> Result<()> {
@@ -199,5 +232,21 @@ pub(crate) trait Attribute: Debug + Send + Sync {
         writer.skip_some(padding_len);
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ParsedAttrs<T: Attribute> {
+    attrs: Vec<T>,
+    seen_types: Vec<T::Type>,
+}
+
+impl<T: Attribute> ParsedAttrs<T> {
+    pub(in netlink) fn new(attrs: Vec<T>, seen_types: Vec<T::Type>) -> Self {
+        Self { attrs, seen_types }
+    }
+
+    pub(in netlink) fn into_parts(self) -> (Vec<T>, Vec<T::Type>) {
+        (self.attrs, self.seen_types)
     }
 }
