@@ -88,6 +88,7 @@ impl datagram_common::Bound for BoundDatagram {
         reader: &mut dyn MultiRead,
         remote: &Self::Endpoint,
         _flags: SendFlags,
+        _strict_check: bool,
     ) -> Result<usize> {
         let result = self
             .bound_socket

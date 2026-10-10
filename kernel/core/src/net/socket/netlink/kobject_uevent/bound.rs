@@ -37,6 +37,7 @@ impl datagram_common::Bound for BoundNetlinkUevent {
         reader: &mut dyn MultiRead,
         remote: &Self::Endpoint,
         flags: SendFlags,
+        _strict_check: bool,
     ) -> Result<usize> {
         // TODO: Deal with flags
         if !flags.is_all_supported() {

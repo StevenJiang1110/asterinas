@@ -3,7 +3,10 @@
 pub(super) use bound::BoundNetlink;
 use unbound::UnboundNetlink;
 
-use super::{GroupIdSet, NetlinkSocketAddr};
+use super::{
+    GroupIdSet, NetlinkSocketAddr,
+    options::{NetlinkGetStrictChk, NetlinkOptionSet},
+};
 use crate::{
     events::IoEvents,
     fs::file::FileCommon,
@@ -45,12 +48,14 @@ pub(crate) struct NetlinkSocket<P: SupportedNetlinkProtocol> {
 #[derive(Clone, Debug)]
 struct OptionSet {
     socket: SocketOptionSet,
+    netlink: NetlinkOptionSet,
 }
 
 impl OptionSet {
     pub(self) fn new() -> Self {
         Self {
             socket: SocketOptionSet::new_netlink(),
+            netlink: NetlinkOptionSet::new(),
         }
     }
 }
@@ -79,6 +84,7 @@ where
         remote: Option<&NetlinkSocketAddr>,
         flags: SendFlags,
     ) -> Result<usize> {
+        let strict_check = self.options.read().netlink.strict_check();
         let sent_bytes = select_remote_and_bind(
             &self.inner,
             remote,
@@ -87,7 +93,7 @@ where
                     .write()
                     .bind_ephemeral(&NetlinkSocketAddr::new_unspecified(), &self.pollee)
             },
-            |bound, remote_endpoint| bound.try_send(reader, remote_endpoint, flags),
+            |bound, remote_endpoint| bound.try_send(reader, remote_endpoint, flags, strict_check),
         )?;
         self.pollee.invalidate();
 
@@ -207,11 +213,13 @@ where
         let options = self.options.read();
 
         // Deal with socket-level options
-        options
+        match options
             .socket
             .get_option(option, &(&*inner, self.socket_type, &self.timeouts))
-
-        // TODO: Deal with netlink-level options
+        {
+            Err(err) if err.error() == Errno::ENOPROTOOPT => options.netlink.get_option(option),
+            result => result,
+        }
     }
 
     fn set_option(&self, option: &dyn SocketOption) -> Result<()> {
@@ -226,11 +234,9 @@ where
             Err(err) if err.error() == Errno::ENOPROTOOPT => (),
             res => return res.map(|_need_iface_poll| ()),
         }
-        // `options` must be dropped here because `do_netlink_setsockopt` may lock other mutexes.
-        drop(options);
 
         // Deal with netlink-level options
-        do_netlink_setsockopt(option, &mut inner)
+        do_netlink_setsockopt(option, &mut options, &mut inner)
     }
 
     fn common(&self) -> &FileCommon {
@@ -306,6 +312,7 @@ impl<P: SupportedNetlinkProtocol> Inner<UnboundNetlink<P>, BoundNetlink<P::Messa
 
 fn do_netlink_setsockopt<P: SupportedNetlinkProtocol>(
     option: &dyn SocketOption,
+    options: &mut OptionSet,
     inner: &mut Inner<UnboundNetlink<P>, BoundNetlink<P::Message>>,
 ) -> Result<()> {
     sock_option_ref!(match option {
@@ -316,6 +323,9 @@ fn do_netlink_setsockopt<P: SupportedNetlinkProtocol>(
         drop_membership @ DropMembership => {
             let groups = drop_membership.get().unwrap();
             inner.drop_groups(GroupIdSet::new(*groups));
+        }
+        strict @ NetlinkGetStrictChk => {
+            options.netlink.set_strict_check(*strict.get().unwrap());
         }
         _ =>
             return_errno_with_message!(Errno::ENOPROTOOPT, "the socket option to be set is unknown"),
