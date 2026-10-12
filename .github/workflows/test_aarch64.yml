@@ -61,7 +61,18 @@ jobs:
         # Remove unused packages from the host to save disk space.
         run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
+      - name: Inspect ARM KVM availability
+        if: ${{ matrix.runs_on == 'ubuntu-24.04-arm' }}
+        run: |
+          uname -m
+          if [ -e /dev/kvm ]; then
+            ls -l /dev/kvm
+          else
+            echo '/dev/kvm is absent; QEMU will use software emulation.'
+          fi
       - name: Run ${{ matrix.test_id }} tests
+        env:
+          OSDK_LOG_LEVEL: info
         uses: ./.github/actions/test
         with:
           auto_test: ${{ matrix.test_id }}
