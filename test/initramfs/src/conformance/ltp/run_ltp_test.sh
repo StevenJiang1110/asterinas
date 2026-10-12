@@ -30,13 +30,13 @@ if [ $? -ne 0 ]; then
 fi
 
 if [ -f "$JSON_REPORT" ]; then
-    STATS_BLOCK=$(sed -n '/"stats": {/,/}/p' "$JSON_REPORT")
-    if ! echo "$STATS_BLOCK" | grep -q '"failed": 0' ||
-       ! echo "$STATS_BLOCK" | grep -q '"broken": 0' ||
-       ! echo "$STATS_BLOCK" | grep -q '"warnings": 0'; then
+    # Use Kirk's interpreter, which is already included in the initramfs closure.
+    PYTHON=$(sed -n '1s/^#!//p' "$LTP_DIR/kirk")
+    if ! "$PYTHON" "$LTP_DIR/report_ltp_results.py" "$JSON_REPORT"; then
         RESULT=1
     fi
 else
+    echo "Error: LTP did not produce a JSON report: $JSON_REPORT" >&2
     RESULT=1
 fi
 

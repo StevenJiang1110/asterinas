@@ -21,6 +21,7 @@ AARCH64_BLOCKLIST="$SCRIPT_DIR/testcases/blocked/aarch64.txt"
 EXT2_BLOCKLIST="$SCRIPT_DIR/testcases/blocked/ext2.txt"
 EXFAT_BLOCKLIST="$SCRIPT_DIR/testcases/blocked/exfat.txt"
 RUN_BASH="$SCRIPT_DIR/run_ltp_test.sh"
+REPORT_SCRIPT="$SCRIPT_DIR/report_ltp_results.py"
 SYSCALLS="$LTP_PREBUILT_DIR/runtest/syscalls"
 
 REQUESTED_TESTS=$(mktemp)
@@ -112,8 +113,12 @@ if [ -d "$LTP_PREBUILT_DIR/bin" ]; then
     cp -r "$LTP_PREBUILT_DIR/bin" "$TARGET_DIR"
 fi
 cp -r "$LTP_PREBUILT_DIR/libkirk" "$TARGET_DIR"
+# Drain test output to EOF so the final warning and summary cannot be lost.
+chmod u+w "$TARGET_DIR/libkirk/channels" "$TARGET_DIR/libkirk/channels/shell.py"
+patch -d "$TARGET_DIR" -p1 < "$SCRIPT_DIR/kirk-drain-stdout.patch"
 cp -f "$LTP_PREBUILT_DIR/kirk" "$TARGET_DIR"
 cp -f "$LTP_PREBUILT_DIR/Version" "$TARGET_DIR"
 cp -f "$LTP_PREBUILT_DIR/ver_linux" "$TARGET_DIR"
 cp -f "$LTP_PREBUILT_DIR/IDcheck.sh" "$TARGET_DIR"
 cp -f "$RUN_BASH" "$TARGET_DIR"
+cp -f "$REPORT_SCRIPT" "$TARGET_DIR"

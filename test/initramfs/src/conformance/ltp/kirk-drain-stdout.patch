@@ -1,0 +1,22 @@
+--- a/libkirk/channels/shell.py
++++ b/libkirk/channels/shell.py
+@@ -175,6 +175,9 @@
+ 
+             while True:
+                 line = await proc.stdout.read(self.BUFFSIZE)
++                if not line:
++                    break
++
+                 sline = line.decode(encoding="utf-8", errors="ignore")
+ 
+                 if iobuffer:
+@@ -182,9 +185,6 @@
+ 
+                 stdout += sline
+                 panic = "Kernel panic" in stdout[-2 * self.BUFFSIZE :]
+-
+-                if not await self._process_alive(proc):
+-                    break
+ 
+             await proc.wait()
+ 
