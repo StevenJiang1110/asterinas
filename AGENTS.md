@@ -39,7 +39,8 @@ Key Makefile targets:
 | `make format`        | Auto-format Rust, Nix, and C code                    |
 | `make docs`          | Build rustdocs for all crates                        |
 
-Set `TARGET_ARCH` to `x86_64` (default), `riscv64`, or `loongarch64`.
+`TARGET_ARCH` defaults to the host architecture reported by `uname -m`.
+Set it explicitly to `x86_64`, `aarch64`, `riscv64`, or `loongarch64` to cross-compile.
 
 ## Toolchain
 

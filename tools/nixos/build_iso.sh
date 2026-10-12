@@ -4,7 +4,7 @@
 
 set -e
 
-TARGET_ARCH=${TARGET_ARCH:-x86_64}
+TARGET_ARCH=${TARGET_ARCH:-$(uname -m)}
 # Accept config file name as parameter, default to "configuration.nix"
 CONFIG_FILE_NAME=${1:-"configuration.nix"}
 

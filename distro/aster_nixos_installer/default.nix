@@ -6,7 +6,7 @@
   extra-substituters ? "",
   extra-trusted-public-keys ? "",
   config-file-name ? "configuration.nix",
-  target_platform ? "x86_64-linux",
+  target_platform ? pkgs.stdenv.hostPlatform.system,
   pkgs ? import ../nixpkgs.nix { },
 }:
 let

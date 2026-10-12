@@ -18,7 +18,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 MODE=$1
-TARGET_ARCH=${TARGET_ARCH:-x86_64}
+TARGET_ARCH=${TARGET_ARCH:-$(uname -m)}
 SCRIPT_DIR=$(dirname "$0")
 ASTERINAS_DIR=$(realpath "${SCRIPT_DIR}/../..")
 

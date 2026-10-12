@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 
-TARGET_ARCH ?= x86_64
+TARGET_ARCH ?= $(shell uname -m)
 SMP ?= 1
 VERBOSE ?= 1
 ENABLE_CONFORMANCE_TEST ?= false

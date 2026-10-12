@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: MPL-2.0
 
-TARGET_ARCH=${1:-${TARGET_ARCH:-x86_64}}
+TARGET_ARCH=${1:-${TARGET_ARCH:-$(uname -m)}}
 
 case "${TARGET_ARCH}" in
     x86_64)

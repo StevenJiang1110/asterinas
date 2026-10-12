@@ -84,10 +84,10 @@ jobs:
       - name: Check in Nix dev shell
         run: |
           nix develop --accept-flake-config --ignore-environment --keep HOME \
-            --command make check
+            --command make check TARGET_ARCH=x86_64
       - name: Build and boot Asterinas
         run: |
           # Keep `NIX_USER_CONF_FILES` so nested Nix builds retain Cachix's post-build hook.
           nix develop --accept-flake-config --ignore-environment --keep HOME \
             --keep NIX_USER_CONF_FILES \
-            --command make run_kernel AUTO_TEST=boot ENABLE_KVM=${{ matrix.enable_kvm }}
+            --command make run_kernel TARGET_ARCH=x86_64 AUTO_TEST=boot ENABLE_KVM=${{ matrix.enable_kvm }}

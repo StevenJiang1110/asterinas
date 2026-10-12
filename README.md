@@ -162,15 +162,20 @@ go to the project folder (`/root/asterinas`) and run:
     ```
 
     This results in a VM running the Asterinas kernel with a small initramfs.
+    The target architecture defaults to the host architecture reported by `uname -m`.
+    Set `TARGET_ARCH` explicitly to cross-compile,
+    for example `make kernel TARGET_ARCH=x86_64` on an ARM64 host.
 
 4. To install and test real-world applications on Asterinas,
 build and run Asterinas NixOS in a VM:
 
     ```bash
-    make nixos
-    make run_nixos
+    make nixos TARGET_ARCH=x86_64
+    make run_nixos TARGET_ARCH=x86_64
     ```
 
+    The NixOS VM currently requires an x86-64 target.
+    On an ARM64 host, add `ENABLE_KVM=0` to `make run_nixos` to use software emulation.
     This boots into an interactive shell in Asterinas NixOS,
     where you can use Nix to install and try more packages.
 

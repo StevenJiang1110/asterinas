@@ -14,7 +14,7 @@ Usage:
       Runs `cargo clippy --all-targets --no-deps` for the standalone `osdk`
       crate.
 
-  [OSDK_TARGET_ARCH=x86_64|riscv64|loongarch64] \
+  [OSDK_TARGET_ARCH=x86_64|aarch64|riscv64|loongarch64] \
   ./tools/clippy_check.sh workspace
       Runs the workspace clippy checks used by `make check`.
       This checks:
@@ -101,7 +101,7 @@ run_workspace_clippy() {
 
     # `linux-bzimage/setup` only supports x86_64 currently.
     # It may fail on other architectures.
-    if [[ "${OSDK_TARGET_ARCH:-x86_64}" = "x86_64" ]]; then
+    if [[ "${OSDK_TARGET_ARCH:-$(uname -m)}" = "x86_64" ]]; then
         echo "Checking ${LINUX_BZIMAGE_SETUP_DIR}"
         (
             cd "$PROJECT_ROOT/$LINUX_BZIMAGE_SETUP_DIR"

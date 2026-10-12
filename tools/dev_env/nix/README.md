@@ -80,12 +80,14 @@ nix build .#qemu .#grub .#ovmf
 Then reproduce the CI checks, which run the shell with a stripped-down host environment:
 
 ```bash
-nix develop --ignore-environment --keep HOME --command make check
-nix develop --ignore-environment --keep HOME --command make run_kernel AUTO_TEST=boot
+nix develop --ignore-environment --keep HOME --command make check TARGET_ARCH=x86_64
+nix develop --ignore-environment --keep HOME --command make run_kernel TARGET_ARCH=x86_64 AUTO_TEST=boot
 ```
 
-CI runs the two commands above on an ARM64 runner as well,
-with `ENABLE_KVM=0` because the x86-64 kernel runs under TCG there.
+CI explicitly targets x86-64 on both x86-64 and ARM64 runners,
+preserving the cross-compilation coverage on ARM64.
+The ARM64 jobs set `ENABLE_KVM=0` because the x86-64 kernel runs under TCG there.
+For native development, omit `TARGET_ARCH` to build for the host architecture.
 
 To check the formatting of the Nix files alone, pass their paths to the shared formatter script:
 

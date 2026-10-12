@@ -97,4 +97,8 @@ since `distro/README.md` references them -->
     make run_kernel
     ```
 
+The target architecture defaults to the host architecture reported by `uname -m`.
+Set `TARGET_ARCH` explicitly to cross-compile,
+for example `make kernel TARGET_ARCH=x86_64` on an ARM64 host.
+
 If everything goes well, Asterinas is now up and running inside a VM.

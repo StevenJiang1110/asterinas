@@ -1,5 +1,5 @@
 {
-  target ? "x86_64",
+  target ? builtins.head (builtins.split "-" system),
   enableBenchmarkTest ? false,
   enableConformanceTest ? false,
   enableRegressionTest ? false,

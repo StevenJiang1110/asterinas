@@ -60,7 +60,9 @@ entry format.
 
 ### Multi-Architecture Support
 
-The test suite supports building for multiple architectures, including `x86_64` and `riscv64`. You can specify the desired architecture by running:
+The test suite defaults to the host architecture reported by `uname -m`.
+It supports building for multiple architectures, including `x86_64`, `aarch64`, and `riscv64`.
+You can specify the desired architecture by running:
 
 ```bash
 make kernel TARGET_ARCH=x86_64

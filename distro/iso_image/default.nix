@@ -4,7 +4,7 @@
   extra-substituters ? "",
   config-file-name ? "configuration.nix",
   extra-trusted-public-keys ? "",
-  target_platform ? "x86_64-linux",
+  target_platform ? pkgs.stdenv.hostPlatform.system,
   version ? "",
   ...
 }:

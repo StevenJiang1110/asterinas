@@ -127,13 +127,13 @@ to customize the NixOS system to be installed:
 generate a disk image with Asterinas NixOS installed using this command:
 
     ```bash
-    make nixos
+    make nixos TARGET_ARCH=x86_64
     ```
 
     or this command:
 
     ```bash
-    make iso && make run_iso
+    make iso TARGET_ARCH=x86_64 && make run_iso TARGET_ARCH=x86_64
     ```
 
     The difference between the two methods is that
@@ -145,9 +145,11 @@ generate a disk image with Asterinas NixOS installed using this command:
     In the [Nix development shell](../kernel/nix-development.md),
     only the second method works,
     because `make nixos` needs root privileges to set up a loop device.
+    The NixOS VM currently requires an x86-64 target.
+    On an ARM64 host, add `ENABLE_KVM=0` to the VM run commands to use software emulation.
 
 3. Start a VM to run the installed Asterinas NixOS:
 
     ```bash
-    make run_nixos
+    make run_nixos TARGET_ARCH=x86_64
     ```

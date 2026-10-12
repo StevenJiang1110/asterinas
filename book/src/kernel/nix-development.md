@@ -7,11 +7,12 @@ The differences are listed at the end of this page.
 
 ## Prerequisites
 
-You need an x86-64 Linux host with [Nix](https://nixos.org/download/) installed
+You need an x86-64 or ARM64 Linux host with [Nix](https://nixos.org/download/) installed
 and [flakes enabled](https://wiki.nixos.org/wiki/Flakes#Enabling_flakes_permanently).
-An ARM64 Linux shell is also provided.
-It still builds the x86-64 kernel by default, which KVM cannot run on an ARM64 host,
-so use the `ENABLE_KVM=0` fallback described below.
+The Makefile builds for the host architecture by default.
+To cross-compile, set `TARGET_ARCH` explicitly.
+For example, run `make run_kernel TARGET_ARCH=x86_64 ENABLE_KVM=0`
+to build and run an x86-64 kernel on an ARM64 host using software emulation.
 
 The Makefile and the build scripts use `/bin/bash`, which does not exist on NixOS by default.
 On NixOS, enable [envfs](https://github.com/Mic92/envfs) in your system configuration
@@ -21,10 +22,12 @@ and rebuild the system before entering the shell:
 services.envfs.enable = true;
 ```
 
-QEMU uses KVM by default, so `/dev/kvm` must exist and your user must be allowed to open it.
-If either is not the case,
-run `make run_kernel ENABLE_KVM=0`
-to fall back to software emulation, which is much slower.
+The Makefile enables KVM when `/dev/kvm` exists and the target architecture matches the host.
+Your user must be allowed to open the device.
+If the device exists but is unusable, run `make run_kernel ENABLE_KVM=0`
+to use software emulation, which is much slower.
+When the device is absent or the target architecture differs from the host,
+the Makefile uses software emulation automatically.
 
 ## Enter the development shell
 
