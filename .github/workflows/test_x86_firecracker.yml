@@ -1,4 +1,4 @@
-name: "Rustup toolchain visibility experiment"
+name: "Cargo cache visibility experiment"
 on:
   workflow_dispatch:
 permissions:
@@ -6,42 +6,56 @@ permissions:
 jobs:
   measure:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        workload: [osdk, kernel]
     container:
       image: asterinas/kernel-dev:0.19.0-20261012
+    env:
+      RUSTUP_HOME: /root/.rustup
+      WORKLOAD: ${{ matrix.workload }}
     steps:
       - uses: actions/checkout@v4
-      - name: Measure default and preinstalled toolchains
+      - name: Measure default and preinstalled Cargo cache
         shell: bash
         run: |
           python3 - <<'PYTHON'
-          import os, pathlib, subprocess, time, json
-          print('ENVIRONMENT', {k:os.environ.get(k) for k in ['HOME','RUSTUP_HOME','CARGO_HOME']}, flush=True)
-          print('HOME_MOUNTS', '\n'.join(l for l in pathlib.Path('/proc/self/mountinfo').read_text().splitlines() if '/github/home' in l), flush=True)
-          for home in ['/root/.rustup','/github/home/.rustup']:
+          import os,pathlib,subprocess,time,json,tomllib
+          workload=os.environ['WORKLOAD']
+          manifest,target=('osdk/Cargo.toml','x86_64-unknown-linux-gnu') if workload=='osdk' else ('Cargo.toml','x86_64-unknown-none')
+          lock=pathlib.Path(manifest).with_name('Cargo.lock')
+          packages=tomllib.loads(lock.read_text())['package']
+          registry=[(v['name'],v['version']) for v in packages if v.get('source','').startswith('registry+')]
+          print('WORKLOAD',workload,'manifest',manifest,'target',target,'lock_registry_packages',len(registry),flush=True)
+          print('ENVIRONMENT',{k:os.environ.get(k) for k in ['HOME','RUSTUP_HOME','CARGO_HOME']},flush=True)
+          for home in ['/root/.cargo','/github/home/.cargo']:
               path=pathlib.Path(home)
-              print('INITIAL_HOME', home, 'exists', path.exists(), 'symlink', path.is_symlink(), flush=True)
-              for manifest in path.glob('toolchains/*/lib/rustlib/components'):
-                  print('INITIAL_COMPONENTS',str(manifest),manifest.read_text(),flush=True)
+              archives=list(path.glob('registry/cache/*/*.crate'))
+              names={f.name for f in archives}
+              matches=sum(f'{name}-{version}.crate' in names for name,version in registry)
+              print('INITIAL_CARGO_HOME',json.dumps({'path':home,'exists':path.exists(),'symlink':path.is_symlink(),'archive_count':len(archives),'matching_lock_archives':matches,'archive_bytes':sum(f.stat().st_size for f in archives),'git_checkout_count':len(list(path.glob('git/checkouts/*/*')))}),flush=True)
+          subprocess.run(['rustup','show','active-toolchain'],check=True)
           def rx():
               return sum(int(line.split(':')[1].split()[0]) for line in pathlib.Path('/proc/net/dev').read_text().splitlines() if ':' in line and line.split(':')[0].strip()!='lo')
           results=[]
-          for name,overrides in [('default-cold',{}),('preinstalled-first',{'RUSTUP_HOME':'/root/.rustup'}),('preinstalled-warm',{'RUSTUP_HOME':'/root/.rustup','RUSTUP_AUTO_INSTALL':'0'})]:
-              env=os.environ.copy(); env.update(overrides)
-              trace=f'/tmp/{name}.trace'
-              before=rx(); start=time.monotonic()
-              result=subprocess.run(['strace','-f','-e','trace=network','-o',trace,'rustup','-v','show','active-toolchain'],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-              duration=time.monotonic()-start; received=rx()-before
-              print('CASE_OUTPUT',name,result.stdout,flush=True)
+          for name,overrides,offline in [('default-cold',{},False),('preinstalled-first',{'CARGO_HOME':'/root/.cargo'},False),('preinstalled-offline',{'CARGO_HOME':'/root/.cargo'},True)]:
+              env=os.environ.copy();env.update(overrides)
+              home=pathlib.Path(env.get('CARGO_HOME',str(pathlib.Path(env['HOME'])/'.cargo')))
+              before_archives={str(f.relative_to(home)) for f in home.glob('registry/cache/*/*.crate')}
+              command=['cargo','fetch','--locked','--manifest-path',manifest,'--target',target]
+              if offline: command.append('--offline')
+              trace=f'/tmp/cargo-{workload}-{name}.trace'
+              before=rx();start=time.monotonic()
+              result=subprocess.run(['strace','-f','-e','trace=network','-o',trace]+command,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+              duration=time.monotonic()-start;received=rx()-before
+              print('CASE_OUTPUT',workload,name,result.stdout,flush=True)
+              archives=list(home.glob('registry/cache/*/*.crate'))
+              new_archives=[f for f in archives if str(f.relative_to(home)) not in before_archives]
               connects=[l for l in pathlib.Path(trace).read_text().splitlines() if 'connect(' in l and ('AF_INET,' in l or 'AF_INET6,' in l)]
-              print('NETWORK_CONNECTS',name,'\n'.join(connects),flush=True)
-              row={'case':name,'seconds':round(duration,3),'interface_rx_bytes':received,'inet_connect_calls':len(connects),'exit_code':result.returncode}
-              results.append(row); print('RESULT',json.dumps(row),flush=True)
-          for home in ['/root/.rustup','/github/home/.rustup']:
-              subprocess.run(['du','-sh',home])
-              for manifest in pathlib.Path(home).glob('toolchains/*/lib/rustlib/components'):
-                  print('FINAL_COMPONENTS',str(manifest),manifest.read_text(),flush=True)
-          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-              f.write('```json\n'+json.dumps(results,indent=2)+'\n```\n')
-          assert all(r['exit_code']==0 for r in results), results
+              row={'workload':workload,'case':name,'seconds':round(duration,3),'interface_rx_bytes':received,'new_crate_archives':len(new_archives),'new_crate_archive_bytes':sum(f.stat().st_size for f in new_archives),'inet_connect_calls':len(connects),'exit_code':result.returncode}
+              results.append(row);print('RESULT',json.dumps(row),flush=True)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('```json\n'+json.dumps(results,indent=2)+'\n```\n')
+          assert all(r['exit_code']==0 for r in results),results
           PYTHON
