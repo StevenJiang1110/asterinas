@@ -1,45 +1,47 @@
-name: "Test x86-64 (Firecracker)"
-
+name: "Rustup toolchain visibility experiment"
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches:
-      - main
-
+permissions:
+  contents: read
 jobs:
-  boot-test:
+  measure:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container:
-      image: asterinas/kernel-dev:0.18.1-20260926
-      options: -v /dev:/dev --privileged
-    env:
-      FC_SERIAL_LOG: /var/log/fc-serial.log
+      image: asterinas/kernel-dev:0.19.0-20261012
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build kernel
-        run: make kernel BOOT_METHOD=vmm-direct BOOT_PROTOCOL=pvh
-
-      - name: Run boot test with Firecracker
+      - name: Measure default and preinstalled toolchains
         shell: bash
         run: |
-          set -euo pipefail
-          trap 'kill $FC_PID 2>/dev/null || true; wait $FC_PID 2>/dev/null || true' EXIT
-
-          firecracker $(./tools/firecracker_args.sh ci-boot) > "$FC_SERIAL_LOG" 2>&1 &
-          FC_PID=$!
-
-          TIMEOUT=10
-          for i in $(seq 1 $TIMEOUT); do
-              if grep -q "^Entered userspace" "$FC_SERIAL_LOG" 2>/dev/null; then
-                  echo "Firecracker boot test passed"
-                  exit 0
-              fi
-              sleep 1
-          done
-
-          echo "Firecracker boot test failed (timeout)"
-          echo "--- Firecracker serial log ---"
-          cat "$FC_SERIAL_LOG"
-          exit 1
+          python3 - <<'PYTHON'
+          import os, pathlib, subprocess, time, json
+          print('ENVIRONMENT', {k:os.environ.get(k) for k in ['HOME','RUSTUP_HOME','CARGO_HOME']}, flush=True)
+          print('HOME_MOUNTS', '\n'.join(l for l in pathlib.Path('/proc/self/mountinfo').read_text().splitlines() if '/github/home' in l), flush=True)
+          for home in ['/root/.rustup','/github/home/.rustup']:
+              path=pathlib.Path(home)
+              print('INITIAL_HOME', home, 'exists', path.exists(), 'symlink', path.is_symlink(), flush=True)
+              for manifest in path.glob('toolchains/*/lib/rustlib/components'):
+                  print('INITIAL_COMPONENTS',str(manifest),manifest.read_text(),flush=True)
+          def rx():
+              return sum(int(line.split(':')[1].split()[0]) for line in pathlib.Path('/proc/net/dev').read_text().splitlines() if ':' in line and line.split(':')[0].strip()!='lo')
+          results=[]
+          for name,overrides in [('default-cold',{}),('preinstalled-first',{'RUSTUP_HOME':'/root/.rustup'}),('preinstalled-warm',{'RUSTUP_HOME':'/root/.rustup','RUSTUP_AUTO_INSTALL':'0'})]:
+              env=os.environ.copy(); env.update(overrides)
+              trace=f'/tmp/{name}.trace'
+              before=rx(); start=time.monotonic()
+              result=subprocess.run(['strace','-f','-e','trace=network','-o',trace,'rustup','-v','show','active-toolchain'],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+              duration=time.monotonic()-start; received=rx()-before
+              print('CASE_OUTPUT',name,result.stdout,flush=True)
+              connects=[l for l in pathlib.Path(trace).read_text().splitlines() if 'connect(' in l and ('AF_INET,' in l or 'AF_INET6,' in l)]
+              print('NETWORK_CONNECTS',name,'\n'.join(connects),flush=True)
+              row={'case':name,'seconds':round(duration,3),'interface_rx_bytes':received,'inet_connect_calls':len(connects),'exit_code':result.returncode}
+              results.append(row); print('RESULT',json.dumps(row),flush=True)
+          for home in ['/root/.rustup','/github/home/.rustup']:
+              subprocess.run(['du','-sh',home])
+              for manifest in pathlib.Path(home).glob('toolchains/*/lib/rustlib/components'):
+                  print('FINAL_COMPONENTS',str(manifest),manifest.read_text(),flush=True)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('```json\n'+json.dumps(results,indent=2)+'\n```\n')
+          assert all(r['exit_code']==0 for r in results), results
+          PYTHON
