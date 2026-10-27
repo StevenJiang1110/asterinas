@@ -130,16 +130,12 @@ impl UtsName {
     // Note that the following names remain constant across all UTS namespaces. They are immutable,
     // meaning the user space cannot change them. They are stored in the UTS namespace for ease of
     // implementing related system calls.
-    //
-    // In addition, we intentionally report Linux-like UTS values instead of Asterinas' real name
-    // and version. These spoofed values satisfy glibc, which inspects uname fields (sysname,
-    // release, version, etc.) and expects Linux-compatible data.
 
     /// The system name.
-    pub(crate) const SYSNAME: &str = "Linux";
+    pub(crate) const SYSNAME: &str = "Asterinas";
 
     /// The release name.
-    pub(crate) const RELEASE: &str = "5.13.0";
+    pub(crate) const RELEASE: &str = "0.19.0";
 
     /// The version name.
     pub(crate) const VERSION: &str = {
