@@ -74,6 +74,9 @@ impl<A: RouteAddressFamily> RouteEntry<A> {
 
     pub(super) fn matches_lookup(&self, key: &RouteLookupKey<A>) -> bool {
         A::contains(&self.dst, key.dst())
+            && key
+                .output_index
+                .is_none_or(|index| index.get() == self.output_iface.index())
     }
 }
 
@@ -172,4 +175,6 @@ pub(in crate::net) enum RouteType {
     Local = 2,
     /// Delivers IPv4 broadcasts.
     Broadcast = 3,
+    /// Delivers packets to a multicast group.
+    Multicast = 5,
 }

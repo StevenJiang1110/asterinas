@@ -67,6 +67,15 @@ static void add_attr(struct route_request *request, int type, const void *value,
 		add_attr(request, type, &_value, sizeof(_value)); \
 	} while (0)
 
+static struct route_request new_lookup(int family, const void *dst, int flags)
+{
+	struct route_request request = new_request(family, 0);
+	request.rtm.rtm_dst_len = family == AF_INET ? 32 : 128;
+	request.rtm.rtm_flags = flags;
+	add_attr(&request, RTA_DST, dst, family == AF_INET ? 4 : 16);
+	return request;
+}
+
 #define TEST_SEND_REQUEST(request)                                   \
 	TEST_RES(sendto(fd, &(request), (request).hdr.nlmsg_len, 0,  \
 			(struct sockaddr *)&kernel, sizeof(kernel)), \
@@ -80,6 +89,25 @@ static int valid_message(struct nlmsghdr *header, ssize_t size, int type,
 	       header->nlmsg_len >= NLMSG_LENGTH(body_size) &&
 	       header->nlmsg_type == type && header->nlmsg_seq == 123;
 }
+
+// The response header and route are exposed as _hdr and _rtm in cond.
+#define TEST_LOOKUP(request, cond)                                     \
+	do {                                                           \
+		TEST_SEND_REQUEST(request);                            \
+		struct nlmsghdr *_hdr = (void *)buffer;                \
+		struct rtmsg *_rtm = NLMSG_DATA(_hdr);                 \
+		TEST_RES(recv(fd, buffer, sizeof(buffer), 0),          \
+			 valid_message(_hdr, _ret, RTM_NEWROUTE,       \
+				       sizeof(*_rtm)) &&               \
+				 !(_hdr->nlmsg_flags & NLM_F_MULTI) && \
+				 (cond));                              \
+	} while (0)
+
+#define TEST_IPV4_LOOKUP(request, type, flags, cond)             \
+	TEST_LOOKUP(request, _rtm->rtm_family == AF_INET &&      \
+				     _rtm->rtm_dst_len == 32 &&  \
+				     _rtm->rtm_type == (type) && \
+				     _rtm->rtm_flags == (flags) && (cond))
 
 #define TEST_RECV_ERROR(type, expected)                                       \
 	do {                                                                  \
@@ -256,6 +284,78 @@ FN_TEST(route_dumps)
 }
 END_TEST()
 
+static int valid_lookup(struct nlmsghdr *header, int family, int flags)
+{
+	struct rtmsg *rtm = NLMSG_DATA(header);
+	int fib_match = flags & RTM_F_FIB_MATCH;
+	int table = family == AF_INET && !(flags & RTM_F_LOOKUP_TABLE) ?
+			    RT_TABLE_MAIN :
+			    RT_TABLE_LOCAL;
+	// Linux may merge the local FIB into MAIN; Asterinas keeps LOCAL separate.
+#ifndef __asterinas__
+	if (family == AF_INET && attr_eq_u32(header, RTA_TABLE, RT_TABLE_MAIN))
+		table = RT_TABLE_MAIN;
+#endif
+	return matches_loopback(header, family) &&
+	       attr_eq_u32(header, RTA_TABLE, table) &&
+	       rtm->rtm_table == table &&
+	       (family != AF_INET ||
+		(rtm->rtm_protocol ==
+			 (fib_match ? RTPROT_KERNEL : RTPROT_UNSPEC) &&
+		 rtm->rtm_scope ==
+			 (fib_match ? RT_SCOPE_HOST : RT_SCOPE_UNIVERSE) &&
+		 rtm->rtm_flags ==
+			 (fib_match ? 0 : RTM_F_CLONED | RTCF_LOCAL))) &&
+	       (fib_match || attr_eq_loopback(header, RTA_PREFSRC, family));
+}
+
+FN_TEST(route_lookups)
+{
+	struct route_request request;
+	int families[] = { AF_INET, AF_INET6 };
+	for (int strict = 0; strict <= 1; strict++) {
+		TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, strict);
+		for (size_t i = 0; i < sizeof(families) / sizeof(families[0]);
+		     i++) {
+			int family = families[i];
+			for (int fib_match = 0; fib_match <= 1; fib_match++) {
+				request = new_lookup(
+					family, loopback_addr(family),
+					fib_match ? RTM_F_FIB_MATCH : 0);
+				ADD_ATTR(&request, RTA_OIF, loopback_index);
+				// iproute2 can attach flow selectors even with destination-only rules.
+				uint16_t port = htons(12345);
+				ADD_ATTR(&request, RTA_UID, (uint32_t)getuid());
+				ADD_ATTR(&request, RTA_MARK, (uint32_t)0);
+				ADD_ATTR(&request, RTA_IP_PROTO,
+					 (uint8_t)IPPROTO_UDP);
+				ADD_ATTR(&request, RTA_SPORT, port);
+				ADD_ATTR(&request, RTA_DPORT, port);
+				TEST_LOOKUP(
+					request,
+					valid_lookup(_hdr, family,
+						     request.rtm.rtm_flags));
+			}
+		}
+	}
+
+	request = new_lookup(AF_INET, &loopback, RTM_F_LOOKUP_TABLE);
+	TEST_LOOKUP(request, valid_lookup(_hdr, AF_INET, RTM_F_LOOKUP_TABLE));
+}
+END_TEST()
+
+FN_TEST(broadcast_fib_lookup)
+{
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 1);
+	uint32_t broadcast = htonl(INADDR_BROADCAST);
+	struct route_request request =
+		new_lookup(AF_INET, &broadcast, RTM_F_FIB_MATCH);
+
+	TEST_LOOKUP(request, _rtm->rtm_family == AF_INET &&
+				     _rtm->rtm_type == RTN_BROADCAST);
+}
+END_TEST()
+
 FN_TEST(single_dump_flags)
 {
 	struct route_request request;
@@ -274,10 +374,110 @@ FN_TEST(single_dump_flags)
 }
 END_TEST()
 
+FN_TEST(unspecified_route_lookup)
+{
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 1);
+	struct route_request request;
+	uint32_t zero = INADDR_ANY;
+	for (int explicit_dst = 0; explicit_dst <= 1; explicit_dst++) {
+		request = new_request(AF_INET, 0);
+		if (explicit_dst) {
+			request.rtm.rtm_dst_len = 32;
+			ADD_ATTR(&request, RTA_DST, zero);
+		}
+		TEST_IPV4_LOOKUP(
+			request, RTN_LOCAL, RTM_F_CLONED | RTCF_LOCAL,
+			attr_eq_u32(_hdr, RTA_DST, zero) &&
+				attr_eq_u32(_hdr, RTA_OIF, loopback_index) &&
+				attr_eq_u32(_hdr, RTA_PREFSRC, loopback) &&
+				!find_attr(_hdr, RTA_GATEWAY, 4));
+	}
+}
+END_TEST()
+
+FN_TEST(multicast_and_broadcast_output)
+{
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 1);
+	struct route_request request;
+	uint32_t destinations[] = { htonl(INADDR_BROADCAST),
+				    htonl(INADDR_ALLHOSTS_GROUP) };
+	for (size_t i = 0; i < sizeof(destinations) / sizeof(destinations[0]);
+	     i++) {
+		for (int explicit_oif = 0; explicit_oif <= 1; explicit_oif++) {
+			request = new_lookup(AF_INET, &destinations[i], 0);
+			if (explicit_oif)
+				ADD_ATTR(&request, RTA_OIF, loopback_index);
+			TEST_IPV4_LOOKUP(
+				request, i == 0 ? RTN_BROADCAST : RTN_MULTICAST,
+				RTM_F_CLONED | RTCF_LOCAL |
+					(i == 0 ? RTCF_BROADCAST :
+						  RTCF_MULTICAST),
+				attr_eq_u32(_hdr, RTA_DST, destinations[i]) &&
+					!find_attr(_hdr, RTA_GATEWAY, 4) &&
+					(!explicit_oif ||
+					 attr_eq_u32(_hdr, RTA_OIF,
+						     loopback_index)));
+		}
+	}
+}
+END_TEST()
+
+FN_TEST(route_notify_flags)
+{
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 0);
+	// Use a distinct cached route so NOTIFY cannot affect other lookup tests.
+	uint32_t destination = htonl(INADDR_LOOPBACK + 1);
+	struct route_request request =
+		new_lookup(AF_INET, &destination, RTM_F_NOTIFY);
+	TEST_LOOKUP(request, _rtm->rtm_flags == (RTM_F_CLONED | RTCF_LOCAL |
+						 RTM_F_NOTIFY | RTCF_NOTIFY));
+}
+END_TEST()
+
 FN_TEST(strict_route_validation)
 {
 	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 1);
 	struct route_request request;
+
+	request = new_request(AF_INET, 0);
+	ADD_ATTR(&request, RTA_DST, loopback);
+	// A destination attribute requires a host prefix in strict mode.
+	TEST_REQUEST_ERROR(request, EINVAL);
+
+	request.rtm.rtm_dst_len = 32;
+	request.rtm.rtm_table = RT_TABLE_MAIN;
+	TEST_REQUEST_ERROR(request, EINVAL);
+
+	request.rtm.rtm_table = 0;
+	request.rtm.rtm_flags = RTM_F_CLONED;
+	TEST_REQUEST_ERROR(request, EINVAL);
+
+	request.rtm.rtm_flags = 0;
+	request.rtm.rtm_dst_len = 24;
+	TEST_REQUEST_ERROR(request, EINVAL);
+
+	request = new_request(AF_INET, 0);
+	request.rtm.rtm_dst_len = 32;
+	add_attr(&request, RTA_DST, &loopback, 1);
+	TEST_REQUEST_ERROR(request, ERANGE);
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 0);
+	TEST_REQUEST_ERROR(request, ERANGE);
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 1);
+
+	request = new_request(AF_INET, 0);
+	ADD_ATTR(&request, 0x3fff, loopback);
+	TEST_REQUEST_ERROR(request, EINVAL);
+
+	request = new_request(AF_INET, 0);
+	request.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtgenmsg));
+	TEST_REQUEST_ERROR(request, EINVAL);
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 0);
+	TEST_REQUEST_ERROR(request, EINVAL);
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 1);
+
+	request = new_request(AF_INET, 0);
+	ADD_ATTR(&request, RTA_OIF, UINT32_MAX);
+	TEST_REQUEST_ERROR(request, ENODEV);
 
 	request = new_request(AF_INET, NLM_F_DUMP);
 	request.rtm.rtm_dst_len = 32;

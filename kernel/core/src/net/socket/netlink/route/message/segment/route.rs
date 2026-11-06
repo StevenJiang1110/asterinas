@@ -59,6 +59,7 @@ bitflags! {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum RouteProtocol {
+    Unspecified = 0,
     Kernel = 2,
     Boot = 3,
 }

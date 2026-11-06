@@ -6,6 +6,8 @@
 //! Callers can look up the local interface that owns an address when binding a socket,
 //! or select an output interface when connecting an unbound socket.
 
+use core::num::NonZeroU32;
+
 use aster_bigtcp::{
     iface::InterfaceType,
     wire::{IpAddress, IpCidr, IpEndpoint, Ipv4Address, Ipv4Cidr, Ipv6Address, Ipv6Cidr},
@@ -30,14 +32,17 @@ static IPV6_ROUTE_MANAGER: Once<RouteManager<Ipv6Address>> = Once::new();
 #[derive(Clone, Debug)]
 struct RouteLookupKey<A: RouteAddressFamily> {
     dst: A,
-    // TODO: Add selectors required by route netlink queries,
-    // such as a source address, TOS, packet mark, and input/output interface.
+    output_index: Option<NonZeroU32>,
+    // TODO: Add source address, TOS, packet mark, and input interface selectors.
 }
 
 impl<A: RouteAddressFamily> RouteLookupKey<A> {
     /// Creates a new route lookup key.
     const fn new(dst: A) -> Self {
-        Self { dst }
+        Self {
+            dst,
+            output_index: None,
+        }
     }
 
     const fn dst(&self) -> &A {
@@ -275,6 +280,28 @@ pub(super) fn ipv4_routes() -> impl Iterator<Item = &'static RouteEntry<Ipv4Addr
 /// Returns all IPv6 routes in table order.
 pub(super) fn ipv6_routes() -> impl Iterator<Item = &'static RouteEntry<Ipv6Address>> {
     IPV6_ROUTE_MANAGER.get().unwrap().entries()
+}
+
+/// Looks up an IPv4 route, optionally restricted to an output interface.
+pub(super) fn lookup_ipv4_route(
+    dst: Ipv4Address,
+    output_index: Option<NonZeroU32>,
+) -> Result<RouteEntry<Ipv4Address>> {
+    IPV4_ROUTE_MANAGER
+        .get()
+        .unwrap()
+        .lookup_entry(&RouteLookupKey { dst, output_index })
+}
+
+/// Looks up an IPv6 route, optionally restricted to an output interface.
+pub(super) fn lookup_ipv6_route(
+    dst: Ipv6Address,
+    output_index: Option<NonZeroU32>,
+) -> Result<RouteEntry<Ipv6Address>> {
+    IPV6_ROUTE_MANAGER
+        .get()
+        .unwrap()
+        .lookup_entry(&RouteLookupKey { dst, output_index })
 }
 
 /// Returns whether an IPv4 route table exists, even if it is empty.
