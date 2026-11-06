@@ -4,6 +4,8 @@
 
 pub(super) mod addr;
 pub(super) mod link;
+pub(super) mod route;
 
 pub(in route) use addr::AddrAttrClass;
 pub(in route) use link::LinkAttrClass;
+pub(in route) use route::RouteAttrClass;

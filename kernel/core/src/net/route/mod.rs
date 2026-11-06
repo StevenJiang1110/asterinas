@@ -21,7 +21,7 @@ mod manager;
 mod rule;
 mod table;
 
-use entry::{RouteAddressFamily, RouteEntry, RouteMetric, RouteTableId, RouteType};
+pub(super) use entry::{RouteAddressFamily, RouteEntry, RouteMetric, RouteTableId, RouteType};
 
 static IPV4_ROUTE_MANAGER: Once<RouteManager<Ipv4Address>> = Once::new();
 static IPV6_ROUTE_MANAGER: Once<RouteManager<Ipv6Address>> = Once::new();
@@ -265,4 +265,24 @@ pub(super) fn is_broadcast_endpoint(endpoint: &IpEndpoint) -> bool {
             .unwrap()
             .lookup_entry(&RouteLookupKey::new(address))
             .is_ok_and(|entry| entry.type_() == RouteType::Broadcast)
+}
+
+/// Returns all IPv4 routes in table order.
+pub(super) fn ipv4_routes() -> impl Iterator<Item = &'static RouteEntry<Ipv4Address>> {
+    IPV4_ROUTE_MANAGER.get().unwrap().entries()
+}
+
+/// Returns all IPv6 routes in table order.
+pub(super) fn ipv6_routes() -> impl Iterator<Item = &'static RouteEntry<Ipv6Address>> {
+    IPV6_ROUTE_MANAGER.get().unwrap().entries()
+}
+
+/// Returns whether an IPv4 route table exists, even if it is empty.
+pub(super) fn has_ipv4_table(table_id: u32) -> bool {
+    IPV4_ROUTE_MANAGER.get().unwrap().has_table(table_id)
+}
+
+/// Returns whether an IPv6 route table exists, even if it is empty.
+pub(super) fn has_ipv6_table(table_id: u32) -> bool {
+    IPV6_ROUTE_MANAGER.get().unwrap().has_table(table_id)
 }

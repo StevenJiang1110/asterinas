@@ -85,7 +85,8 @@ impl<Body: SegmentBody, Attr: Attribute> SegmentCommon<Body, Attr> {
 
         let attr_validation = if strict_check {
             AttrValidation::Strict
-        } else if GetRequestFlags::from_bits_truncate(header.flags).contains(GetRequestFlags::DUMP)
+        } else if GetRequestFlags::from_bits_truncate(header.flags)
+            .intersects(GetRequestFlags::DUMP)
         {
             AttrValidation::LegacyDump
         } else {

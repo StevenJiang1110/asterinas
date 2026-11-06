@@ -17,6 +17,7 @@ use crate::{
 
 mod addr;
 mod link;
+mod route;
 mod util;
 
 pub(super) struct NetlinkRouteKernelSocket {
@@ -47,6 +48,9 @@ impl NetlinkRouteKernelSocket {
             RtnlSegment::GetAddr(request_segment) => {
                 addr::do_get_addr(request_segment, strict_check)
             }
+            RtnlSegment::GetRoute(request_segment) => {
+                route::do_get_route(request_segment, strict_check)
+            }
             _ => Err(Error::with_message(
                 Errno::EOPNOTSUPP,
                 "the netlink route request is not supported",
@@ -56,8 +60,7 @@ impl NetlinkRouteKernelSocket {
         let mut response_segments = match response_segments {
             Ok(segments) => segments,
             Err(error) => {
-                // TODO: Deal with the `NetlinkMessageCommonFlags::ACK` flag.
-                // Should we return `ErrorSegment` if ACK flag does not exist?
+                // Errors are reported regardless of the ACK flag.
                 // Reference: <https://docs.kernel.org/userspace-api/netlink/intro.html#netlink-message-types>.
                 let err_segment = ErrorSegment::new_from_request(request_header, Some(error));
                 self.report_error(err_segment, dst_port);

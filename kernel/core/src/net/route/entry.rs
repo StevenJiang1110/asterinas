@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use aster_bigtcp::wire::{Ipv4Address, Ipv4Cidr, Ipv6Address, Ipv6AddressExt, Ipv6Cidr};
+use core::net::IpAddr;
+
+use aster_bigtcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr, Ipv6Address, Ipv6AddressExt, Ipv6Cidr};
 
 use super::RouteLookupKey;
 use crate::{net::iface::Iface, prelude::*};
 
 /// A route that describes how to handle packets for a destination network.
 #[derive(Clone)]
-pub(super) struct RouteEntry<A: RouteAddressFamily> {
+pub(in crate::net) struct RouteEntry<A: RouteAddressFamily> {
     dst: A::Cidr,
-    #[expect(dead_code)]
     gateway: Option<A>,
     output_iface: Arc<Iface>,
     table_id: RouteTableId,
@@ -42,33 +43,32 @@ impl<A: RouteAddressFamily> RouteEntry<A> {
     }
 
     /// Returns the destination network.
-    pub(super) const fn dst(&self) -> &A::Cidr {
+    pub(in crate::net) const fn dst(&self) -> &A::Cidr {
         &self.dst
     }
 
     /// Returns the next-hop gateway.
-    #[expect(dead_code)]
-    const fn gateway(&self) -> Option<A> {
+    pub(in crate::net) const fn gateway(&self) -> Option<A> {
         self.gateway
     }
 
     /// Returns the output interface.
-    pub(super) const fn output_iface(&self) -> &Arc<Iface> {
+    pub(in crate::net) const fn output_iface(&self) -> &Arc<Iface> {
         &self.output_iface
     }
 
     /// Returns the ID of the table containing the route.
-    pub(super) const fn table_id(&self) -> RouteTableId {
+    pub(in crate::net) const fn table_id(&self) -> RouteTableId {
         self.table_id
     }
 
     /// Returns the route metric.
-    pub(super) const fn metric(&self) -> RouteMetric {
+    pub(in crate::net) const fn metric(&self) -> RouteMetric {
         self.metric
     }
 
     /// Returns the route type.
-    pub(super) const fn type_(&self) -> RouteType {
+    pub(in crate::net) const fn type_(&self) -> RouteType {
         self.type_
     }
 
@@ -78,9 +78,9 @@ impl<A: RouteAddressFamily> RouteEntry<A> {
 }
 
 /// An IP address family supported by the routing manager.
-pub(super) trait RouteAddressFamily: Copy + Eq + Ord {
+pub(in crate::net) trait RouteAddressFamily: Copy + Eq + Ord + Into<IpAddr> {
     /// The CIDR type associated with this address family.
-    type Cidr: Copy + Eq + Ord;
+    type Cidr: Copy + Eq + Ord + Into<IpCidr>;
 
     /// Returns whether `cidr` contains `address`.
     fn contains(cidr: &Self::Cidr, address: &Self) -> bool;
@@ -128,33 +128,48 @@ impl RouteAddressFamily for Ipv6Address {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(super) struct RouteTableId(u32);
+pub(in crate::net) struct RouteTableId(u32);
 
 impl RouteTableId {
+    pub(super) const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    pub(in crate::net) const fn get(self) -> u32 {
+        self.0
+    }
+
     /// The table ID of the default table,
     /// which is reserved for routes used after earlier rules do not match.
-    pub(super) const DEFAULT: Self = Self(253);
+    pub(in crate::net) const DEFAULT: Self = Self(253);
     /// The table ID of the main table.
-    pub(super) const MAIN: Self = Self(254);
+    pub(in crate::net) const MAIN: Self = Self(254);
     /// The table ID of the local table,
     /// which manages routes for addresses assigned locally.
-    pub(super) const LOCAL: Self = Self(255);
+    pub(in crate::net) const LOCAL: Self = Self(255);
 }
 
 /// A route metric used to prefer routes with equal prefix lengths;
 /// lower values have higher priority.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub(super) struct RouteMetric(u32);
+pub(in crate::net) struct RouteMetric(u32);
+
+impl RouteMetric {
+    pub(in crate::net) const fn get(self) -> u32 {
+        self.0
+    }
+}
 
 /// The forwarding behavior of a route.
 ///
 /// Reference: <https://elixir.bootlin.com/linux/v7.1/source/include/uapi/linux/rtnetlink.h#L261>.
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum RouteType {
+pub(in crate::net) enum RouteType {
     /// Forwards packets to a destination.
-    Unicast,
+    Unicast = 1,
     /// Delivers packets locally.
-    Local,
+    Local = 2,
     /// Delivers IPv4 broadcasts.
-    Broadcast,
+    Broadcast = 3,
 }
