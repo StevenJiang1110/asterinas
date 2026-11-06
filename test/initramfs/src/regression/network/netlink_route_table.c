@@ -29,7 +29,7 @@ static const struct in6_addr ipv6_loopback = IN6ADDR_LOOPBACK_INIT;
 FN_SETUP(init)
 {
 	fd = CHECK(socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE));
-	// Bound receive waits so a missing response fails instead of hanging.
+	// Bound receive waits, including the second response to an ACK request.
 	struct timeval timeout = { .tv_sec = 1 };
 	CHECK(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
 			 sizeof(timeout)));
@@ -371,6 +371,16 @@ FN_TEST(single_dump_flags)
 			TEST_DUMP(request, _rtm->rtm_family == AF_INET);
 		}
 	}
+}
+END_TEST()
+
+FN_TEST(route_lookup_ack)
+{
+	TEST_SETSOCKOPT_INT(fd, NETLINK_GET_STRICT_CHK, 0);
+	struct route_request request = new_lookup(AF_INET, &loopback, 0);
+	request.hdr.nlmsg_flags |= NLM_F_ACK;
+	TEST_LOOKUP(request, valid_lookup(_hdr, AF_INET, 0));
+	TEST_RECV_ERROR(NLMSG_ERROR, 0);
 }
 END_TEST()
 

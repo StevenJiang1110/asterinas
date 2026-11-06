@@ -9,7 +9,7 @@ use super::message::{RtnlMessage, RtnlSegment};
 use crate::{
     net::socket::netlink::{
         addr::PortNum,
-        message::{ErrorSegment, ProtocolSegment},
+        message::{ErrorSegment, ProtocolSegment, SegHdrCommonFlags},
         table::{NetlinkRouteProtocol, SupportedNetlinkProtocol},
     },
     prelude::*,
@@ -81,6 +81,9 @@ impl NetlinkRouteKernelSocket {
             Vec::new()
         };
 
+        let needs_ack = done_segments.is_empty()
+            && SegHdrCommonFlags::from_bits_truncate(request_header.flags)
+                .contains(SegHdrCommonFlags::ACK);
         for segments in [response_segments, done_segments] {
             if segments.is_empty() {
                 continue;
@@ -90,6 +93,13 @@ impl NetlinkRouteKernelSocket {
             debug!("netlink route response: {:?}", response);
 
             NetlinkRouteProtocol::unicast(dst_port, response).unwrap();
+        }
+
+        if needs_ack {
+            self.report_error(
+                ErrorSegment::new_from_request(request_header, None),
+                dst_port,
+            );
         }
     }
 
